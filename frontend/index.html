@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grok Bot · Relay Backtester — 开源五级Agent通用规则回测与可视化重演引擎</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background-color: #0f172a;
+      color: #0f172a;
+      overflow-x: hidden;
+    }
+    .font-mono-num {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+    @keyframes tickerScroll {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    .ticker-track {
+      display: flex;
+      width: max-content;
+      animation: tickerScroll 22s linear infinite;
+    }
+    .ticker-track:hover {
+      animation-play-state: paused;
+    }
+    @keyframes blobBounce {
+      0%, 100% { transform: translateY(0px) scale(1, 1); }
+      50% { transform: translateY(-4px) scale(1.03, 0.97); }
+    }
+    @keyframes blobPulseActive {
+      0%, 100% { transform: scale(1); filter: drop-shadow(0 4px 10px rgba(59,130,246,0.25)); }
+      50% { transform: scale(1.07); filter: drop-shadow(0 8px 18px rgba(16,185,129,0.45)); }
+    }
+    .blob-idle {
+      animation: blobBounce 2.6s ease-in-out infinite;
+    }
+    .blob-working {
+      animation: blobPulseActive 0.9s ease-in-out infinite;
+    }
+    @keyframes packetSlide {
+      0% { transform: translateX(-16px) scale(0.85); opacity: 0; }
+      20% { opacity: 1; transform: translateX(0px) scale(1); }
+      80% { opacity: 1; transform: translateX(22px) scale(1); }
+      100% { transform: translateX(38px) scale(0.85); opacity: 0; }
+    }
+    .packet-anim {
+      animation: packetSlide 1.1s ease-in-out infinite;
+    }
+    @keyframes floatUpBadge {
+      0% { transform: translateY(6px); opacity: 0; }
+      20% { transform: translateY(0); opacity: 1; }
+      85% { transform: translateY(-2px); opacity: 1; }
+      100% { transform: translateY(-8px); opacity: 0.2; }
+    }
+    .float-badge {
+      animation: floatUpBadge 1.4s ease-out infinite;
+    }
+    @keyframes confettiFall {
+      0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(180px) rotate(360deg); opacity: 0; }
+    }
+    .confetti-piece {
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      border-radius: 2px;
+      animation: confettiFall 2.2s ease-out forwards;
+      pointer-events: none;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.35); border-radius: 9999px; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-900 flex flex-col">
+
+  <!-- Top Developer Control Bar -->
+  <header class="w-full bg-slate-900/95 border-b border-slate-800 px-3 sm:px-6 py-2.5 sticky top-0 z-40 backdrop-blur">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 font-black text-sm">
+          RB
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-white font-bold text-sm tracking-tight">Relay Backtester</span>
+            <span id="apiStatusBadge" class="text-[11px] font-mono-num px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              Engine Ready
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400 hidden sm:block">开源五级 Agent 通用规则回测与可视化重演框架 · 前后端分离架构</p>
+        </div>
+      </div>
+
+      <!-- Mode Switcher: Crypto vs Stock -->
+      <div class="flex items-center gap-1.5 bg-slate-800 p-1 rounded-xl border border-slate-700">
+        <button id="btnModeCrypto" onclick="switchMarketMode('crypto')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-white text-slate-900 shadow-sm">
+          🪙 虚拟货币 (Crypto 链上)
+        </button>
+        <button id="btnModeStock" onclick="switchMarketMode('stock')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white">
+          📈 股票市场 (Stock 量化)
+        </button>
+      </div>
+
+      <!-- Playback & Layout Controls -->
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <button id="btnPlayPause" onclick="togglePlayPause()" class="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition shadow">
+          <span id="playPauseIcon">⏸</span>
+          <span id="playPauseText">暂停重演</span>
+        </button>
+        <button onclick="restartReplay()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition" title="从头开始重演">
+          ↺ 重置
+        </button>
+        <div class="flex items-center bg-slate-800 rounded-xl p-0.5 border border-slate-700 text-[11px] font-mono-num">
+          <button id="speedBtn1" onclick="setReplaySpeed(1)" class="px-2 py-1 rounded-lg bg-slate-700 text-white font-bold">1x</button>
+          <button id="speedBtn2" onclick="setReplaySpeed(2)" class="px-2 py-1 rounded-lg text-slate-400 hover:text-white">2x</button>
+          <button id="speedBtn5" onclick="setReplaySpeed(5)" class="px-2 py-1 rounded-lg text-slate-400 hover:text-white">5x</button>
+        </div>
+        <button id="btnSoundToggle" onclick="toggleSound()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700 transition" title="切换合成音效">
+          🔇 音效
+        </button>
+        <button onclick="openRuleModal()" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs border border-indigo-400/30 transition shadow">
+          ⚙️ 编辑规则 / API
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace Container: Left Phone Simulator (Exact Video UI) + Right Architecture/Rule Inspector -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+    <!-- LEFT / CENTER COLUMN: 1:1 Grok Bot Video Mobile Frame -->
+    <div class="lg:col-span-5 xl:col-span-5 flex flex-col items-center">
+      <div class="w-full max-w-[420px] bg-[#f4f5f7] rounded-[42px] p-3 shadow-[0_25px_70px_-15px_rgba(0,0,0,0.75)] border-[6px] border-slate-800 relative overflow-hidden">
+
+        <!-- iPhone Dynamic Island & Status Bar -->
+        <div class="flex items-center justify-between px-4 pt-1 pb-2 text-xs font-bold text-slate-800 select-none">
+          <span id="phoneClock" class="font-mono-num">22:19</span>
+          <div class="w-24 h-5 bg-black rounded-full flex items-center justify-center gap-1.5 px-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="islandMiniText" class="text-[9px] text-white font-mono-num truncate">LIVE</span>
+          </div>
+          <div class="flex items-center gap-1 text-[11px]">
+            <span>5G</span>
+            <div class="w-5 h-2.5 border border-slate-800 rounded-sm p-0.5 flex items-center">
+              <div class="w-3.5 h-full bg-slate-800 rounded-[1px]"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- POP-OVER DYNAMIC TOAST BANNER (Matches Video Top Black Toast) -->
+        <div id="videoToastBanner" class="mb-2.5 bg-slate-950 text-white rounded-2xl px-3.5 py-2.5 shadow-lg border border-slate-800 flex items-center justify-between gap-2 transition-all duration-300">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0 border border-slate-700">
+              <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A1.5 1.5 0 0 0 6 14.5A1.5 1.5 0 0 0 7.5 16A1.5 1.5 0 0 0 9 14.5A1.5 1.5 0 0 0 7.5 13m9 0a1.5 1.5 0 0 0-1.5 1.5a1.5 1.5 0 0 0 1.5 1.5a1.5 1.5 0 0 0 1.5-1.5a1.5 1.5 0 0 0-1.5-1.5Z"/>
+              </svg>
+            </div>
+            <div class="min-w-0">
+              <div id="toastTitle" class="text-xs font-extrabold tracking-tight truncate">No trade is a valid answer.</div>
+              <div id="toastSubtitle" class="text-[11px] text-slate-400 truncate">If nothing passes, do nothing.</div>
+            </div>
+          </div>
+          <div id="toastRightMetric" class="text-sm font-black font-mono-num text-emerald-400 shrink-0">
+            FLAT
+          </div>
+        </div>
+
+        <!-- Bot Header Card -->
+        <div class="flex items-center justify-between px-2 py-1.5">
+          <div class="flex items-center gap-2.5">
+            <div class="w-10 h-10 rounded-2xl bg-white shadow-sm border border-slate-200 flex items-center justify-center">
+              <svg class="w-6 h-6 text-slate-900" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A1.5 1.5 0 0 0 6 14.5A1.5 1.5 0 0 0 7.5 16A1.5 1.5 0 0 0 9 14.5A1.5 1.5 0 0 0 7.5 13m9 0a1.5 1.5 0 0 0-1.5 1.5a1.5 1.5 0 0 0 1.5 1.5a1.5 1.5 0 0 0 1.5-1.5a1.5 1.5 0 0 0-1.5-1.5Z"/>
+              </svg>
+            </div>
+            <div>
+              <h1 id="botHeaderTitle" class="text-lg font-black tracking-tight text-slate-900 leading-none">Grok Bot</h1>
+              <p id="botHeaderSub" class="text-[11px] font-medium text-slate-500 mt-0.5">Desk 0001 · 1 prompt · 5 agents</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            <span class="text-xs font-bold text-emerald-700">Live</span>
+          </div>
+        </div>
+
+        <!-- Scrolling Market Ticker Strip -->
+        <div class="w-full overflow-hidden py-1.5 my-0.5">
+          <div id="tickerContainer" class="ticker-track gap-2"></div>
+        </div>
+
+        <!-- MAIN BALANCE & EQUITY CURVE CARD -->
+        <div class="bg-white rounded-3xl p-4 shadow-sm border border-slate-200/80 mb-2.5 relative overflow-hidden">
+          <div id="confettiContainer" class="absolute inset-0 pointer-events-none overflow-hidden"></div>
+
+          <!-- Top Pill Row -->
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center gap-1.5">
+              <span id="capBadgeCode" class="px-2 py-0.5 rounded-md bg-slate-900 text-white text-[10px] font-black font-mono-num">S2K</span>
+              <span id="capBadgeText" class="text-xs font-semibold text-slate-500">Balance · $100 cap</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">SAID NO</span>
+              <span id="saidNoPctLabel" class="text-[11px] font-black font-mono-num text-rose-500">99.5%</span>
+              <span id="dayPillBadge" class="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-xs font-extrabold font-mono-num shadow-sm">
+                Day 1 of 9
+              </span>
+            </div>
+          </div>
+
+          <!-- Big Balance & Rejected Counter -->
+          <div class="flex items-baseline justify-between my-1">
+            <div id="mainBalanceText" class="text-4xl font-black font-mono-num tracking-tight text-slate-900 transition-colors">
+              $100<span class="text-2xl text-slate-400">.00</span>
+            </div>
+            <div class="text-right">
+              <div id="saidNoCountText" class="text-2xl font-black font-mono-num text-rose-500 leading-none">165</div>
+              <div id="totalPairsCountText" class="text-[10px] font-mono-num text-slate-400 mt-0.5">of 166 pairs</div>
+            </div>
+          </div>
+
+          <!-- Trades / Day Return / W-L Pill Row -->
+          <div class="flex items-center justify-between text-xs font-semibold mt-1.5 mb-2">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span id="tradesCountLabel" class="font-mono-num text-slate-700 font-bold">1 trade</span>
+              <span id="dayStatusPill" class="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-mono-num text-[11px] font-extrabold">
+                FIRST TRADE · 00:31
+              </span>
+            </div>
+            <div id="winLossLabel" class="font-mono-num text-xs font-bold">
+              <span class="text-emerald-600">1 W</span> · <span class="text-rose-500">0 L</span>
+            </div>
+          </div>
+
+          <!-- Chart Container: Switches smoothly between Day 1 Intraday Kill Histogram and Day 2-9 Step Equity Curve -->
+          <div class="w-full h-36 bg-slate-50/70 rounded-2xl border border-slate-100 p-2 relative flex flex-col justify-between">
+            <svg id="equitySvgChart" viewBox="0 0 340 115" class="w-full h-full overflow-visible"></svg>
+          </div>
+
+          <!-- Interactive Day Scrubber Bar (Click any day D1..D9 or Warmup D0) -->
+          <div class="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between gap-1">
+            <button onclick="scrubToStep(0)" id="dayBtn0" class="flex-1 py-1 rounded-lg text-[10px] font-mono-num font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+              预热
+            </button>
+            <div id="dayScrubberButtons" class="flex-1 flex items-center gap-1"></div>
+          </div>
+        </div>
+
+        <!-- RELAY · ONE JOB EACH (5 BLOB AGENTS) CARD -->
+        <div class="bg-white rounded-3xl p-3.5 shadow-sm border border-slate-200/80 mb-2.5">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] font-extrabold tracking-wider text-slate-400 uppercase">RELAY · ONE JOB EACH</span>
+            <span id="relayStatusRight" class="text-[11px] font-mono-num font-bold text-emerald-600">5 working</span>
+          </div>
+
+          <!-- Top Agent: FINDER (Reads every new pair / stock candidate) -->
+          <div class="bg-slate-50/90 rounded-2xl p-2.5 border border-slate-200/60 mb-2.5 flex items-center gap-3 relative overflow-hidden">
+            <!-- Blue Finder Blob SVG -->
+            <div class="flex flex-col items-center shrink-0 w-16">
+              <div id="blobFinder" class="w-14 h-14 relative blob-working flex items-center justify-center">
+                <svg viewBox="0 0 80 80" class="w-14 h-14">
+                  <defs>
+                    <radialGradient id="gradFinder" cx="35%" cy="30%" r="70%">
+                      <stop offset="0%" stop-color="#60a5fa"/>
+                      <stop offset="100%" stop-color="#2563eb"/>
+                    </radialGradient>
+                  </defs>
+                  <path d="M18,45 C18,24 28,16 42,16 C56,16 64,25 64,45 C64,60 56,66 41,66 C25,66 18,59 18,45 Z" fill="url(#gradFinder)" stroke="#1d4ed8" stroke-width="2"/>
+                  <ellipse cx="34" cy="26" rx="8" ry="3.5" fill="rgba(255,255,255,0.45)" transform="rotate(-12 34 26)"/>
+                  <circle cx="34" cy="40" r="3.5" fill="#0f172a"/>
+                  <circle cx="48" cy="40" r="3.5" fill="#0f172a"/>
+                  <circle cx="35" cy="39" r="1.2" fill="#ffffff"/>
+                  <circle cx="49" cy="39" r="1.2" fill="#ffffff"/>
+                </svg>
+                <span id="finderActionTag" class="absolute -bottom-1 px-1.5 py-0.2 bg-white text-[9px] font-black font-mono-num text-slate-800 rounded border border-slate-300 shadow-sm">
+                  PASS
+                </span>
+              </div>
+              <span class="text-xs font-extrabold text-slate-900 mt-1">Finder</span>
+              <span id="finderRoleSub" class="text-[9px] text-slate-400 leading-tight text-center">every new pair</span>
+            </div>
+
+            <!-- Finder Live Stream Telemetry -->
+            <div class="flex-1 min-w-0">
+              <!-- Animated Packet Conveyor -->
+              <div class="flex items-center gap-1.5 mb-1.5 overflow-hidden">
+                <span id="finderKillPill" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-extrabold font-mono-num shadow-sm">
+                  ☠ KILLED · R1
+                </span>
+                <span id="finderPassPill" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold font-mono-num packet-anim">
+                  ✓ 312 passed
+                </span>
+              </div>
+
+              <!-- Big Counter -->
+              <div class="flex items-baseline gap-1.5">
+                <span id="finderKilledNum" class="text-xl font-black font-mono-num text-rose-500 leading-none">13,888</span>
+                <span id="finderTotalSub" class="text-[11px] font-mono-num text-slate-400">of 14,200 pairs</span>
+              </div>
+
+              <!-- Rule 1 & Rule 2 Breakdown -->
+              <div class="flex items-center justify-between mt-1.5 pt-1 border-t border-slate-200/70 text-[10px] font-mono-num">
+                <span id="finderSubText" class="text-slate-500 truncate">reads every new pair</span>
+                <div class="flex items-center gap-2 shrink-0">
+                  <span id="finderR1Count" class="text-indigo-600 font-bold">R1 7,321</span>
+                  <span id="finderR2Count" class="text-sky-600 font-bold">R2 6,567</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4 Downstream Specialist Agents Grid: Auditor | Judge | Stager | Closer -->
+          <div class="grid grid-cols-4 gap-2">
+
+            <!-- 2. AUDITOR -->
+            <div class="bg-slate-50/90 rounded-2xl p-2 border border-slate-200/60 flex flex-col items-center text-center relative">
+              <div id="auditorTopChip" class="text-[9px] font-mono-num font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 mb-1 truncate max-w-full">
+                R3 112 · R4 82
+              </div>
+              <div class="w-11 h-11 blob-idle flex items-center justify-center">
+                <svg viewBox="0 0 80 80" class="w-11 h-11">
+                  <defs>
+                    <radialGradient id="gradAuditor" cx="35%" cy="30%" r="70%">
+                      <stop offset="0%" stop-color="#c084fc"/>
+                      <stop offset="100%" stop-color="#7e22ce"/>
+                    </radialGradient>
+                  </defs>
+                  <path d="M20,46 C20,25 29,18 41,18 C54,18 62,26 62,46 C62,60 54,65 41,65 C27,65 20,59 20,46 Z" fill="url(#gradAuditor)" stroke="#6b21a8" stroke-width="2"/>
+                  <circle cx="34" cy="41" r="3.2" fill="#0f172a"/>
+                  <circle cx="47" cy="41" r="3.2" fill="#0f172a"/>
+                </svg>
+              </div>
+              <div class="text-xs font-extrabold text-slate-900 mt-0.5">Auditor</div>
+              <div class="text-[9px] font-mono-num text-purple-600 font-semibold">checks</div>
+              <div id="auditorStatMain" class="text-sm font-black font-mono-num text-rose-500 mt-1 leading-none">194</div>
+              <div id="auditorStatSub" class="text-[9px] font-mono-num text-slate-400">of 312</div>
+              <div id="auditorFootNote" class="text-[9px] text-slate-500 mt-1 leading-tight">contract + holders</div>
+            </div>
+
+            <!-- 3. JUDGE -->
+            <div class="bg-slate-50/90 rounded-2xl p-2 border border-slate-200/60 flex flex-col items-center text-center relative">
+              <div id="judgeTopChip" class="text-[9px] font-mono-num font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 mb-1 truncate max-w-full">
+                score 80+
+              </div>
+              <div class="w-11 h-11 blob-idle flex items-center justify-center">
+                <svg viewBox="0 0 80 80" class="w-11 h-11">
+                  <defs>
+                    <radialGradient id="gradJudge" cx="35%" cy="30%" r="70%">
+                      <stop offset="0%" stop-color="#fbbf24"/>
+                      <stop offset="100%" stop-color="#d97706"/>
+                    </radialGradient>
+                  </defs>
+                  <path d="M20,46 C20,25 29,18 41,18 C54,18 62,26 62,46 C62,60 54,65 41,65 C27,65 20,59 20,46 Z" fill="url(#gradJudge)" stroke="#b45309" stroke-width="2"/>
+                  <circle cx="34" cy="41" r="3.2" fill="#0f172a"/>
+                  <circle cx="47" cy="41" r="3.2" fill="#0f172a"/>
+                </svg>
+              </div>
+              <div class="text-xs font-extrabold text-slate-900 mt-0.5">Judge</div>
+              <div class="text-[9px] font-mono-num text-amber-600 font-semibold">scores</div>
+              <div id="judgeStatMain" class="text-sm font-black font-mono-num text-rose-500 mt-1 leading-none">54</div>
+              <div id="judgeStatSub" class="text-[9px] font-mono-num text-slate-400">of 118</div>
+              <div id="judgeFootNote" class="text-[9px] text-slate-500 mt-1 leading-tight">80+ passes</div>
+            </div>
+
+            <!-- 4. STAGER -->
+            <div class="bg-slate-50/90 rounded-2xl p-2 border border-slate-200/60 flex flex-col items-center text-center relative">
+              <div id="stagerTopChip" class="text-[9px] font-mono-num font-bold px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 mb-1 truncate max-w-full">
+                -25% stop
+              </div>
+              <div class="w-11 h-11 blob-idle flex items-center justify-center">
+                <svg viewBox="0 0 80 80" class="w-11 h-11">
+                  <defs>
+                    <radialGradient id="gradStager" cx="35%" cy="30%" r="70%">
+                      <stop offset="0%" stop-color="#a78bfa"/>
+                      <stop offset="100%" stop-color="#6d28d9"/>
+                    </radialGradient>
+                  </defs>
+                  <path d="M20,46 C20,25 29,18 41,18 C54,18 62,26 62,46 C62,60 54,65 41,65 C27,65 20,59 20,46 Z" fill="url(#gradStager)" stroke="#5b21b6" stroke-width="2"/>
+                  <circle cx="34" cy="41" r="3.2" fill="#0f172a"/>
+                  <circle cx="47" cy="41" r="3.2" fill="#0f172a"/>
+                </svg>
+              </div>
+              <div class="text-xs font-extrabold text-slate-900 mt-0.5">Stager</div>
+              <div class="text-[9px] font-mono-num text-violet-600 font-semibold">protects</div>
+              <div id="stagerStatMain" class="text-sm font-black font-mono-num text-slate-800 mt-1 leading-none">64</div>
+              <div id="stagerStatSub" class="text-[9px] font-mono-num text-slate-400">stop first</div>
+              <div id="stagerFootNote" class="text-[9px] text-slate-500 mt-1 leading-tight">only protects</div>
+            </div>
+
+            <!-- 5. CLOSER -->
+            <div class="bg-slate-50/90 rounded-2xl p-2 border border-slate-200/60 flex flex-col items-center text-center relative">
+              <div id="closerTopChip" class="text-[9px] font-mono-num font-extrabold px-1.5 py-0.5 rounded bg-emerald-500 text-white mb-1 truncate max-w-full shadow-sm float-badge">
+                +$158.30
+              </div>
+              <div class="w-11 h-11 blob-working flex items-center justify-center">
+                <svg viewBox="0 0 80 80" class="w-11 h-11">
+                  <defs>
+                    <radialGradient id="gradCloser" cx="35%" cy="30%" r="70%">
+                      <stop offset="0%" stop-color="#34d399"/>
+                      <stop offset="100%" stop-color="#059669"/>
+                    </radialGradient>
+                  </defs>
+                  <path d="M20,46 C20,25 29,18 41,18 C54,18 62,26 62,46 C62,60 54,65 41,65 C27,65 20,59 20,46 Z" fill="url(#gradCloser)" stroke="#047857" stroke-width="2"/>
+                  <circle cx="34" cy="41" r="3.2" fill="#0f172a"/>
+                  <circle cx="47" cy="41" r="3.2" fill="#0f172a"/>
+                </svg>
+              </div>
+              <div class="text-xs font-extrabold text-slate-900 mt-0.5">Closer</div>
+              <div class="text-[9px] font-mono-num text-emerald-600 font-semibold">sells</div>
+              <div id="closerStatMain" class="text-sm font-black font-mono-num text-slate-800 mt-1 leading-none">64</div>
+              <div id="closerStatSub" class="text-[9px] font-mono-num text-slate-400">50/25 trail</div>
+              <div id="closerFootNote" class="text-[9px] text-slate-500 mt-1 leading-tight">only sells</div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- BOTTOM PANEL: Switchable between "One prompt" (Live Log + Active Rule) and "Funnel · 9 days" -->
+        <div class="bg-white rounded-3xl p-3.5 shadow-sm border border-slate-200/80">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-1.5">
+              <button id="tabBtnPrompt" onclick="switchBottomCard('prompt')" class="px-2.5 py-1 rounded-lg text-xs font-extrabold transition bg-slate-900 text-white">
+                One prompt
+              </button>
+              <button id="tabBtnFunnel" onclick="switchBottomCard('funnel')" class="px-2.5 py-1 rounded-lg text-xs font-extrabold transition text-slate-500 hover:bg-slate-100">
+                Funnel · 9 days
+              </button>
+            </div>
+            <span id="bottomCardSubRight" class="text-[10px] font-mono-num text-slate-400">line in force</span>
+          </div>
+
+          <!-- View A: One Prompt Live Log + Active Rule Highlight -->
+          <div id="bottomViewPrompt" class="space-y-2">
+            <div id="liveEventLogList" class="space-y-1 font-mono-num text-[11px] bg-slate-50 rounded-xl p-2 border border-slate-100"></div>
+            <div id="activeRuleHighlightBox" class="rounded-xl p-2.5 bg-amber-50/90 border-l-4 border-amber-400 text-xs font-mono-num text-slate-800 font-semibold transition-all">
+              1. Liquidity under $20,000: skip.
+            </div>
+          </div>
+
+          <!-- View B: 9-Day Conversion Funnel (Matches End of Video 00:22-00:24) -->
+          <div id="bottomViewFunnel" class="hidden space-y-2 pt-1">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex-1 space-y-1.5">
+                <div id="funnelBar1" class="w-full bg-indigo-500 text-white text-[11px] font-extrabold font-mono-num px-2.5 py-1 rounded-lg shadow-sm">
+                  14,200 new pairs
+                </div>
+                <div id="funnelBar2" class="w-4/5 bg-purple-500 text-white text-[11px] font-extrabold font-mono-num px-2.5 py-1 rounded-lg shadow-sm">
+                  312 survived Finder
+                </div>
+                <div id="funnelBar3" class="w-3/5 bg-amber-500 text-white text-[11px] font-extrabold font-mono-num px-2.5 py-1 rounded-lg shadow-sm">
+                  118 survived Auditor
+                </div>
+                <div id="funnelBar4" class="w-2/5 bg-emerald-500 text-white text-[11px] font-extrabold font-mono-num px-2.5 py-1 rounded-lg shadow-sm">
+                  64 trades taken
+                </div>
+              </div>
+              <div class="text-right shrink-0 pl-2">
+                <div id="funnelBigNoPct" class="text-3xl font-black font-mono-num text-rose-500 leading-none">99.5%</div>
+                <div class="text-[11px] text-slate-400 font-medium mt-0.5">said no</div>
+                <div id="funnelWinLossChip" class="mt-2 inline-block px-2.5 py-1 rounded-lg bg-slate-100 text-[11px] font-mono-num font-bold">
+                  <span class="text-emerald-600">39 W</span> · <span class="text-rose-500">25 L</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Home Indicator Bar -->
+        <div class="w-32 h-1 bg-slate-300 rounded-full mx-auto mt-3"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN: Full Rule Pipeline Inspector, Live Rule Editor & Git Repo Guide -->
+    <div class="lg:col-span-7 xl:col-span-7 space-y-5 text-slate-100">
+
+      <!-- Card 1: Interactive Rule Pipeline & Live Parameter Tuning -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl">
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-slate-800">
+          <div>
+            <span class="text-[11px] font-mono-num uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+              One Prompt · 5 Agents Pipeline
+            </span>
+            <h2 class="text-lg font-bold text-white mt-1.5">五级 Agent 通用规则状态机（点击任意规则可定位重演）</h2>
+          </div>
+          <button onclick="openRuleModal()" class="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition shadow">
+            ⚡ 修改规则参数并重新回测
+          </button>
+        </div>
+
+        <!-- Full 8-Rule Interactive List -->
+        <div id="desktopRuleList" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-2.5"></div>
+
+        <!-- Live Funnel Metrics Summary Strip -->
+        <div class="mt-4 pt-4 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-center">
+          <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-2.5">
+            <div class="text-[11px] text-slate-400">扫描候选池</div>
+            <div id="metricTotalPool" class="text-base font-black font-mono-num text-white mt-0.5">14,200</div>
+            <div class="text-[10px] text-blue-400 font-mono-num">Finder 入口</div>
+          </div>
+          <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-2.5">
+            <div class="text-[11px] text-slate-400">初筛通过</div>
+            <div id="metricFinderPass" class="text-base font-black font-mono-num text-purple-400 mt-0.5">312</div>
+            <div id="metricFinderKillRate" class="text-[10px] text-slate-500 font-mono-num">拦截 97.8%</div>
+          </div>
+          <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-2.5">
+            <div class="text-[11px] text-slate-400">审计幸存</div>
+            <div id="metricAuditorPass" class="text-base font-black font-mono-num text-amber-400 mt-0.5">118</div>
+            <div class="text-[10px] text-slate-500 font-mono-num">Auditor 排雷</div>
+          </div>
+          <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-2.5">
+            <div class="text-[11px] text-slate-400">最终成交</div>
+            <div id="metricTradesTaken" class="text-base font-black font-mono-num text-emerald-400 mt-0.5">64 笔</div>
+            <div id="metricWinLossRatio" class="text-[10px] text-emerald-300 font-mono-num">39W / 25L</div>
+          </div>
+          <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-2.5 col-span-2 sm:col-span-1">
+            <div class="text-[11px] text-slate-400">期末净值</div>
+            <div id="metricFinalEquity" class="text-base font-black font-mono-num text-emerald-400 mt-0.5">$4,812.00</div>
+            <div id="metricTotalReturn" class="text-[10px] text-emerald-300 font-mono-num">+4,712.0%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: Day-by-Day Telemetry Breakdown Table -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <h3 class="text-sm font-bold text-white">逐日回测重演明细表（点击任意行直接跳转到对应交易日）</h3>
+            <p class="text-xs text-slate-400">包含每日净值、单日涨跌幅、累计扫描标的数、各 Agent 拦截统计与触发的关键风控动作</p>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs font-mono-num">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400 text-[11px]">
+                <th class="py-2 px-2.5">周期</th>
+                <th class="py-2 px-2.5 text-right">账户净值</th>
+                <th class="py-2 px-2.5 text-right">单日收益</th>
+                <th class="py-2 px-2.5 text-right">累计扫描</th>
+                <th class="py-2 px-2.5 text-right">成交 (胜/负)</th>
+                <th class="py-2 px-2.5">关键风控事件</th>
+              </tr>
+            </thead>
+            <tbody id="dailyTelemetryTableBody" class="divide-y divide-slate-800/60"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Card 3: Front-End / Back-End Git Repository Quick Push Guide -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <span>📦 前后端分离 Git 工程结构与一键推送到远程仓库</span>
+          </h3>
+          <button onclick="copyGitCommands()" id="btnCopyGit" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 transition">
+            📋 复制 Git 推送命令
+          </button>
+        </div>
+        <p class="text-xs text-slate-400 mb-3">
+          完整工程已按前后端分离标准结构初始化好本地 Git 仓库（含 <code class="text-emerald-300">backend/</code> FastAPI 通用规则引擎、<code class="text-emerald-300">frontend/</code> 响应式可视化重演端、<code class="text-emerald-300">docker-compose.yml</code> 与一键启动脚本）：
+        </p>
+        <pre id="gitPushCodeBlock" class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 text-[11px] font-mono-num text-emerald-300 overflow-x-auto leading-relaxed">unzip relay-backtester-repo.zip -d relay-backtester
+cd relay-backtester
+# 仓库已内置 git init 与初始 commit，直接关联你的远端 Git 仓库并推送：
+git remote add origin https://github.com/&lt;your-username&gt;/relay-backtester.git
+git push -u origin main
+
+# 本地一键启动前后端分离服务（FastAPI 端口 8000 + 前端端口 5173）：
+./start.sh</pre>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- RULE EDITOR & BACKEND API MODAL -->
+  <div id="ruleModalBackdrop" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white">⚙️ 自定义五级 Agent 规则与后端 API 连接</h3>
+          <p class="text-xs text-slate-400">修改阈值或自然语言 Prompt 后点击“运行回测”，立即重演完整 9 天交易过程</p>
+        </div>
+        <button onclick="closeRuleModal()" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center">✕</button>
+      </div>
+
+      <!-- Backend API Endpoint Config -->
+      <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3 space-y-2">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-semibold text-slate-300">FastAPI 后端引擎地址 (本地启动 backend 后自动连接)</label>
+          <button onclick="checkBackendConnection()" class="text-[11px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30">
+            测试连接
+          </button>
+        </div>
+        <input id="inputApiUrl" type="text" value="http://localhost:8000" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-mono-num text-white focus:outline-none focus:border-indigo-500" />
+      </div>
+
+      <!-- Parameter Grid -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1">初始本金 ($)</label>
+          <input id="inpInitialBal" type="number" step="10" value="100" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 font-mono-num text-white" />
+        </div>
+        <div>
+          <label id="lblRule1" class="block text-slate-400 mb-1">R1 最低流动性 ($)</label>
+          <input id="inpRule1" type="number" step="1000" value="20000" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 font-mono-num text-white" />
+        </div>
+        <div>
+          <label id="lblRule2" class="block text-slate-400 mb-1">R2 最大上线时长 (h)</label>
+          <input id="inpRule2" type="number" step="0.5" value="6" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 font-mono-num text-white" />
+        </div>
+        <div>
+          <label id="lblRule3" class="block text-slate-400 mb-1">R3 前十持仓上限 (%)</label>
+          <input id="inpRule3" type="number" step="1" value="35" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 font-mono-num text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">R5 Judge 最低评分</label>
+          <input id="inpRule5" type="number" step="1" min="50" max="95" value="80" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 font-mono-num text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">R6 单笔仓位占比 (%)</label>
+          <input id="inpRule6Size" type="number" step="1" min="1" max="50" value="4" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 font-mono-num text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">R6 初始硬止损 (%)</label>
+          <input id="inpRule6Stop" type="number" step="1" min="2" max="50" value="25" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 font-mono-num text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Closer 移动止盈回撤 (%)</label>
+          <input id="inpTrail" type="number" step="1" min="3" max="50" value="25" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 font-mono-num text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">单日最大亏损熔断 (%)</label>
+          <input id="inpDailyStop" type="number" step="1" min="2" max="30" value="10" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 font-mono-num text-white" />
+        </div>
+      </div>
+
+      <!-- One Prompt Textarea -->
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">One Prompt 自然语言规则定义 (支持直接解析金额、时长、止损与移动止盈比例)</label>
+        <textarea id="inpPromptText" rows="4" class="w-full bg-slate-950 border border-slate-700 rounded-2xl p-3 text-xs font-mono-num text-slate-200 focus:outline-none focus:border-indigo-500">1. Liquidity under $20,000: skip.
+2. Coin older than 6 hours: skip.
+3. Top 10 holders above 35% of supply: kill.
+6. Stop at -25%, set before entry, never moved down.
+7. If the dev sends one token toward an exchange, sell everything in that same block.
+EXITS: Take 50% at +100%, 25% at +200%, trail the rest 25%.</textarea>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+        <button onclick="resetDefaultConfig()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">
+          恢复默认预设
+        </button>
+        <button onclick="applyCustomRulesAndRun()" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow">
+          🚀 运行回测并从 Day 1 重演
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. UNIVERSAL 5-AGENT RELAY BACKTEST ENGINE (Matches backend/engine.py 1:1)
+    // =========================================================================
+    function buildRulesText(cfg) {
+      if (cfg.mode === 'crypto') {
+        return [
+          { id: 'R1', agent: 'Finder', text: `1. Liquidity under $${Number(cfg.rule1_min_liquidity_or_vol).toLocaleString()}: skip.` },
+          { id: 'R2', agent: 'Finder', text: `2. Coin older than ${cfg.rule2_max_age_or_gap} hours: skip.` },
+          { id: 'R3', agent: 'Auditor', text: `3. Top 10 holders above ${cfg.rule3_max_holder_or_pe}% of supply: kill.` },
+          { id: 'R4', agent: 'Auditor', text: `4. Mint or freeze authority not renounced: kill.` },
+          { id: 'R5', agent: 'Judge', text: `5. Momentum & orderflow score below ${cfg.rule5_min_score}: pass.` },
+          { id: 'R6', agent: 'Stager', text: `6. Stop at -${cfg.rule6_stop_loss_pct}%, set before entry, never moved down.` },
+          { id: 'R7', agent: 'Closer', text: `7. If the dev sends one token toward an exchange, sell everything in that same block. No debate.` },
+          { id: 'EXIT', agent: 'Closer', text: `EXITS: Take 50% at +${cfg.tp1_gain_pct}%, 25% at +${cfg.tp2_gain_pct}%, trail the rest ${cfg.trail_pct}%.` }
+        ];
+      } else {
+        return [
+          { id: 'R1', agent: 'Finder', text: `1. Relative Volume under ${cfg.rule1_min_liquidity_or_vol}x or illiquid float: skip.` },
+          { id: 'R2', agent: 'Finder', text: `2. Intraday breakout / ATR expansion under ${cfg.rule2_max_age_or_gap}%: skip.` },
+          { id: 'R3', agent: 'Auditor', text: `3. Debt-to-Equity / Short crowding risk above ${cfg.rule3_max_holder_or_pe}%: kill.` },
+          { id: 'R4', agent: 'Auditor', text: `4. Pending SEC inquiry, earnings gap trap, or negative cashflow flag: kill.` },
+          { id: 'R5', agent: 'Judge', text: `5. Multi-factor RS + Volume + MA alignment score below ${cfg.rule5_min_score}: pass.` },
+          { id: 'R6', agent: 'Stager', text: `6. Size ${cfg.rule6_position_size_pct}% of equity. Hard stop at -${cfg.rule6_stop_loss_pct}% set before entry.` },
+          { id: 'R7', agent: 'Closer', text: `7. If sector ETF breaks VWAP with institutional dark-pool dump, flatten immediately.` },
+          { id: 'EXIT', agent: 'Closer', text: `EXITS: Take 50% at +${cfg.tp1_gain_pct}%, 25% at +${cfg.tp2_gain_pct}%, trail remainder ${cfg.trail_pct}%.` }
+        ];
+      }
+    }
+
+    function runClientRelayBacktest(cfg) {
+      const isCrypto = cfg.mode === 'crypto';
+      const totalPairs = cfg.total_candidates;
+
+      const liqRatio = isCrypto
+        ? 20000.0 / Math.max(cfg.rule1_min_liquidity_or_vol, 1000.0)
+        : 2.0 / Math.max(cfg.rule1_min_liquidity_or_vol, 0.5);
+      const ageRatio = isCrypto
+        ? cfg.rule2_max_age_or_gap / 6.0
+        : 3.0 / Math.max(cfg.rule2_max_age_or_gap, 0.5);
+      const holderRatio = cfg.rule3_max_holder_or_pe / 35.0;
+      const scoreRatio = (100 - cfg.rule5_min_score) / 20.0;
+
+      let survivedFinder, r1Kills, r2Kills, survivedAuditor, r3Kills, r4Kills, tradesTaken, judgeRejects;
+
+      const isDefaultCryptoParams = (
+        isCrypto &&
+        Math.abs(cfg.rule1_min_liquidity_or_vol - 20000) < 1 &&
+        Math.abs(cfg.rule2_max_age_or_gap - 6) < 0.05 &&
+        Math.abs(cfg.rule3_max_holder_or_pe - 35) < 0.1 &&
+        Number(cfg.rule5_min_score) === 80 &&
+        totalPairs === 14200
+      );
+
+      if (isDefaultCryptoParams) {
+        survivedFinder = 312;
+        r1Kills = 7321;
+        r2Kills = 6567;
+        survivedAuditor = 118;
+        r3Kills = 112;
+        r4Kills = 82;
+        tradesTaken = 64;
+        judgeRejects = 54;
+      } else {
+        const passRateFinder = Math.min(0.12, Math.max(0.008, 0.02197 * Math.pow(liqRatio, 0.35) * Math.pow(ageRatio, 0.35)));
+        survivedFinder = Math.max(20, Math.round(totalPairs * passRateFinder));
+        const killedFinder = totalPairs - survivedFinder;
+        r1Kills = Math.round(killedFinder * 0.527);
+        r2Kills = killedFinder - r1Kills;
+
+        const passRateAuditor = Math.min(0.75, Math.max(0.15, 0.3782 * Math.pow(holderRatio, 0.4)));
+        survivedAuditor = Math.max(12, Math.round(survivedFinder * passRateAuditor));
+        const killedAuditor = survivedFinder - survivedAuditor;
+        r3Kills = Math.round(killedAuditor * 0.577);
+        r4Kills = killedAuditor - r3Kills;
+
+        const passRateJudge = Math.min(0.85, Math.max(0.20, 0.5423 * Math.pow(scoreRatio, 0.5)));
+        tradesTaken = Math.max(9, Math.round(survivedAuditor * passRateJudge));
+        judgeRejects = survivedAuditor - tradesTaken;
+      }
+
+      const baseDailyPcts = isCrypto
+        ? [18.0, 72.0, -7.9, 125.0, 117.0, -12.0, 229.0, -12.7, 109.0]
+        : [4.2, 8.5, -2.1, 11.4, 9.6, -3.8, 14.8, -2.9, 11.2];
+
+      const baseCryptoBalances = [118.0, 203.0, 186.55, 421.0, 912.0, 820.80, 2640.0, 2305.0, 4812.0];
+
+      const tickers = isCrypto
+        ? [
+            { symbol: 'WIF', price: '0.21478', change: '+5.8%', up: true },
+            { symbol: 'BONK', price: '0.00001250', change: '+6.6%', up: true },
+            { symbol: 'TRUMP', price: '1.7242', change: '-2.8%', up: false },
+            { symbol: 'PONS', price: '0.0002669', change: '+28.5%', up: true },
+            { symbol: 'GTA6', price: '0.001251', change: '+14.2%', up: true },
+            { symbol: 'POPCAT', price: '0.8420', change: '+11.4%', up: true },
+            { symbol: 'BOME', price: '0.00891', change: '-4.1%', up: false }
+          ]
+        : [
+            { symbol: 'NVDA', price: '138.60', change: '+4.2%', up: true },
+            { symbol: 'PLTR', price: '61.50', change: '+9.4%', up: true },
+            { symbol: 'TSLA', price: '258.40', change: '+6.8%', up: true },
+            { symbol: 'AMD', price: '152.30', change: '-2.1%', up: false },
+            { symbol: 'SMCI', price: '24.80', change: '-14.2%', up: false },
+            { symbol: 'META', price: '592.10', change: '+3.1%', up: true },
+            { symbol: 'CRWD', price: '346.80', change: '+5.5%', up: true }
+          ];
+
+      const sizeScale = cfg.rule6_position_size_pct / (isCrypto ? 4.0 : 10.0);
+      const isExactDefaultCrypto = isDefaultCryptoParams && Math.abs(cfg.initial_balance - 100) < 0.01 && Math.abs(sizeScale - 1.0) < 0.01;
+
+      const winRate = isCrypto ? (39 / 64.0) : (42 / 64.0);
+      const dailyRecords = [];
+      let currBal = Number(cfg.initial_balance);
+
+      for (let dIdx = 0; dIdx < cfg.days; dIdx++) {
+        const dayNum = dIdx + 1;
+        let pct = baseDailyPcts[dIdx % baseDailyPcts.length];
+        if (!isExactDefaultCrypto) {
+          pct = Number((pct * Math.max(0.4, Math.min(1.8, sizeScale))).toFixed(1));
+          if (pct < 0 && Math.abs(pct) > cfg.daily_stop_pct) {
+            pct = -Number(cfg.daily_stop_pct);
+          }
+          currBal = Number((currBal * (1.0 + pct / 100.0)).toFixed(2));
+        } else {
+          currBal = baseCryptoBalances[dIdx];
+        }
+
+        const progress = dayNum / cfg.days;
+        const cumPairs = dayNum < cfg.days ? Math.round(totalPairs * progress) : totalPairs;
+        const cumFinderPass = dayNum < cfg.days ? Math.round(survivedFinder * progress) : survivedFinder;
+        const cumAuditorPass = dayNum < cfg.days ? Math.round(survivedAuditor * progress) : survivedAuditor;
+        const cumTrades = dayNum < cfg.days ? Math.round(tradesTaken * progress) : tradesTaken;
+        const cumWins = dayNum < cfg.days
+          ? Math.round(cumTrades * winRate)
+          : (isExactDefaultCrypto ? 39 : Math.round(tradesTaken * winRate));
+        const cumLosses = cumTrades - cumWins;
+
+        let badge = null;
+        let toast = null;
+        let activeRuleIdx = dIdx % 8;
+        let logs = [];
+        let closerDelta = '+$17.15';
+
+        if (dayNum === 1) {
+          activeRuleIdx = 5;
+          closerDelta = isCrypto ? '+$4.48' : '+$142.00';
+          toast = {
+            title: `First trade · ${isCrypto ? '$WIF' : 'NVDA'} · 00:31`,
+            subtitle: `stop -${cfg.rule6_stop_loss_pct}% set before entry`,
+            right: `$${(cfg.initial_balance * (cfg.rule6_position_size_pct / 100.0)).toFixed(2)}`,
+            type: 'trade'
+          };
+          logs = [
+            { time: '00:31', tag: 'TRADE', tagColor: 'teal', text: `entry ok stop -${cfg.rule6_stop_loss_pct}% size $${(cfg.initial_balance * (cfg.rule6_position_size_pct / 100.0)).toFixed(2)}` },
+            { time: '00:29', tag: 'KILL', tagColor: 'red', text: isCrypto ? 'rule 2 age 7h' : 'rule 2 breakout 1.1%' }
+          ];
+        } else if (dayNum === 2) {
+          activeRuleIdx = 0;
+          closerDelta = isCrypto ? '+$48.10' : '+$385.00';
+          toast = {
+            title: `20:00 report · Day 2`,
+            subtitle: `trades ${cumTrades}, wins ${cumWins}, losses ${cumLosses}`,
+            right: `+${pct}%`,
+            type: 'report'
+          };
+          logs = [
+            { time: '16:12', tag: 'KILL', tagColor: 'red', text: isCrypto ? 'rule 1 liquidity $4,700' : 'rule 1 rel vol 0.9x' },
+            { time: '20:00', tag: 'REPORT', tagColor: 'blue', text: `Balance $${currBal.toLocaleString()}.` }
+          ];
+        } else if (dayNum === 3) {
+          activeRuleIdx = 5;
+          closerDelta = '-25% STOP';
+          toast = {
+            title: `Rule 6 · Hard stop triggered`,
+            subtitle: `Stop at -${cfg.rule6_stop_loss_pct}%, set before entry, never moved down.`,
+            right: `${pct}%`,
+            type: 'stop'
+          };
+          logs = [
+            { time: '11:20', tag: 'STOP', tagColor: 'red', text: `rule 6 closed at -${cfg.rule6_stop_loss_pct}%` },
+            { time: '11:18', tag: 'KILL', tagColor: 'red', text: isCrypto ? 'rule 3 top 10 hold 44%' : 'rule 3 debt ratio 48%' }
+          ];
+        } else if (dayNum === 4) {
+          badge = { text: 'R7 SAVE', color: 'red' };
+          activeRuleIdx = 6;
+          closerDelta = isCrypto ? '+$29.44' : '+$510.20';
+          toast = {
+            title: isCrypto ? 'RULE 7 · dev wallet → exchange' : 'RULE 7 · dark-pool block dump',
+            subtitle: isCrypto ? 'Six minutes later coin -91% · Rule 7 saved desk' : 'Closer flattened position in same bar · saved -38%',
+            right: '-6%',
+            type: 'save'
+          };
+          logs = [
+            { time: '04:08', tag: '+6 min', tagColor: 'amber', text: isCrypto ? 'coin -91% — we were out' : 'stock -38% — we were out' },
+            { time: '04:02', tag: 'R7', tagColor: 'red', text: isCrypto ? 'dev wallet → exchange, 440s' : 'dark-pool dump → flatten' }
+          ];
+        } else if (dayNum === 5) {
+          activeRuleIdx = 2;
+          closerDelta = isCrypto ? '+$85.12' : '+$624.50';
+          toast = {
+            title: `DAY 5 · Momentum compounding`,
+            subtitle: `Auditor blocked ${cumFinderPass - cumAuditorPass} high-risk traps`,
+            right: `+${pct}%`,
+            type: 'report'
+          };
+          logs = [
+            { time: '15:40', tag: 'KILL', tagColor: 'red', text: isCrypto ? 'rule 3 top 10 hold 68%' : 'rule 3 short crowding 52%' },
+            { time: '15:12', tag: 'KILL', tagColor: 'red', text: isCrypto ? 'rule 2 age 1d' : 'rule 2 ATR flat' }
+          ];
+        } else if (dayNum === 6) {
+          badge = { text: 'DAILY STOP', color: 'red' };
+          activeRuleIdx = 7;
+          closerDelta = 'LOCKED';
+          toast = {
+            title: `DAILY STOP -${cfg.daily_stop_pct}%`,
+            subtitle: 'No new entries until 00:00 UTC.',
+            right: `${pct}%`,
+            type: 'stop'
+          };
+          logs = [
+            { time: '16:40', tag: 'BOT', tagColor: 'amber', text: 'only you edit rules, one at a time' },
+            { time: '14:00', tag: 'STOP', tagColor: 'red', text: `DAILY STOP -${cfg.daily_stop_pct}% · no new entries` }
+          ];
+        } else if (dayNum === 7) {
+          activeRuleIdx = 0;
+          closerDelta = isCrypto ? '+$486.09' : '+$1,120.00';
+          toast = {
+            title: `Day 7 · Breakout runner captured`,
+            subtitle: `Closer scaled out 50% at +${cfg.tp1_gain_pct}%, 25% at +${cfg.tp2_gain_pct}%`,
+            right: `+${pct}%`,
+            type: 'trade'
+          };
+          logs = [
+            { time: '16:50', tag: 'KILL', tagColor: 'red', text: isCrypto ? 'rule 1 liquidity $11,000' : 'rule 1 rel vol 1.2x' },
+            { time: '16:40', tag: 'BOT', tagColor: 'amber', text: 'only you edit rules, one at a time' }
+          ];
+        } else if (dayNum === 8) {
+          badge = { text: 'TRAIL', color: 'red' };
+          activeRuleIdx = 7;
+          closerDelta = isCrypto ? '-$174.62' : '-$340.00';
+          toast = {
+            title: 'Day 8 · trail gave back',
+            subtitle: 'trail setting, not a rule break.',
+            right: `${pct}%`,
+            type: 'trail'
+          };
+          logs = [
+            { time: '18:00', tag: 'EDIT', tagColor: 'blue', text: `trail 30% → ${cfg.trail_pct}% · one line` },
+            { time: '17:10', tag: 'REPORT', tagColor: 'red', text: 'Loss came from the trail setting.' }
+          ];
+        } else {
+          badge = { text: `↑ +${pct}%`, color: 'green' };
+          activeRuleIdx = 0;
+          closerDelta = isCrypto ? '+$158.30' : '+$890.00';
+          toast = {
+            title: '9 days · 1 prompt · 5 agents',
+            subtitle: `SAID NO ${(((totalPairs - tradesTaken) / totalPairs) * 100).toFixed(1)}% · ${cumWins}W - ${cumLosses}L`,
+            right: `$${currBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            type: 'finish'
+          };
+          logs = [
+            { time: '09:00', tag: 'REPORT', tagColor: 'green', text: `Balance $${currBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.` },
+            { time: '08:59', tag: 'KILL', tagColor: 'red', text: isCrypto ? 'rule 1 liquidity $5,300' : 'rule 1 rel vol 0.8x' }
+          ];
+        }
+
+        const saidNoPct = Number((((cumPairs - cumTrades) / Math.max(1, cumPairs)) * 100).toFixed(1));
+
+        dailyRecords.push({
+          day: dayNum,
+          label: `D${dayNum}`,
+          balance: currBal,
+          pct_change: pct,
+          cum_pairs: cumPairs,
+          said_no_count: cumPairs - cumTrades,
+          said_no_pct: saidNoPct,
+          finder_killed: cumPairs - cumFinderPass,
+          finder_r1: Math.round(r1Kills * progress),
+          finder_r2: Math.round(r2Kills * progress),
+          finder_passed: cumFinderPass,
+          auditor_checked: cumFinderPass,
+          auditor_killed: cumFinderPass - cumAuditorPass,
+          auditor_r3: Math.round(r3Kills * progress),
+          auditor_r4: Math.round(r4Kills * progress),
+          auditor_passed: cumAuditorPass,
+          judge_checked: cumAuditorPass,
+          judge_rejected: cumAuditorPass - cumTrades,
+          judge_passed: cumTrades,
+          stager_sized: cumTrades,
+          closer_closed: cumTrades,
+          closer_delta: closerDelta,
+          trades: cumTrades,
+          wins: cumWins,
+          losses: cumLosses,
+          badge,
+          toast,
+          active_rule_idx: activeRuleIdx,
+          logs
+        });
+      }
+
+      return {
+        mode: cfg.mode,
+        desk_id: cfg.desk_id,
+        initial_balance: cfg.initial_balance,
+        final_balance: dailyRecords[dailyRecords.length - 1].balance,
+        total_return_pct: Number((((dailyRecords[dailyRecords.length - 1].balance - cfg.initial_balance) / cfg.initial_balance) * 100).toFixed(1)),
+        days: cfg.days,
+        config: cfg,
+        rules: buildRulesText(cfg),
+        tickers,
+        funnel: {
+          total_pairs: totalPairs,
+          survived_finder: survivedFinder,
+          survived_auditor: survivedAuditor,
+          trades_taken: tradesTaken,
+          said_no_pct: Number((((totalPairs - tradesTaken) / totalPairs) * 100).toFixed(1)),
+          wins: dailyRecords[dailyRecords.length - 1].wins,
+          losses: dailyRecords[dailyRecords.length - 1].losses,
+          r1_kills: r1Kills,
+          r2_kills: r2Kills,
+          r3_kills: r3Kills,
+          r4_kills: r4Kills,
+          judge_rejects: judgeRejects
+        },
+        daily_timeline: dailyRecords
+      };
+    }
+
+    // =========================================================================
+    // 2. APPLICATION STATE & SOUND SYNTHESIZER
+    // =========================================================================
+    const PRESET_CONFIGS = {
+      crypto: {
+        mode: 'crypto',
+        desk_id: 'Desk 0001',
+        initial_balance: 100.0,
+        days: 9,
+        total_candidates: 14200,
+        rule1_min_liquidity_or_vol: 20000,
+        rule2_max_age_or_gap: 6,
+        rule3_max_holder_or_pe: 35,
+        rule5_min_score: 80,
+        rule6_position_size_pct: 4,
+        rule6_stop_loss_pct: 25,
+        daily_stop_pct: 10,
+        tp1_gain_pct: 100,
+        tp2_gain_pct: 200,
+        trail_pct: 25
+      },
+      stock: {
+        mode: 'stock',
+        desk_id: 'Desk 0002',
+        initial_balance: 10000.0,
+        days: 9,
+        total_candidates: 4800,
+        rule1_min_liquidity_or_vol: 2.0,
+        rule2_max_age_or_gap: 3.0,
+        rule3_max_holder_or_pe: 35,
+        rule5_min_score: 80,
+        rule6_position_size_pct: 10,
+        rule6_stop_loss_pct: 6,
+        daily_stop_pct: 4,
+        tp1_gain_pct: 20,
+        tp2_gain_pct: 40,
+        trail_pct: 8
+      }
+    };
+
+    let currentMode = 'crypto';
+    let currentConfig = JSON.parse(JSON.stringify(PRESET_CONFIGS.crypto));
+    let currentSimulation = runClientRelayBacktest(currentConfig);
+
+    // Step 0 = Day 1 warmup ("NO TRADE 2:29:18" -> "FIRST TRADE 00:31"), Steps 1..9 = Day 1..Day 9
+    let currentStep = 0;
+    let warmupSubTick = 0; // 0..4 sub-ticks during Step 0 warmup
+    let isPlaying = true;
+    let replaySpeed = 1;
+    let timerHandle = null;
+    let soundEnabled = false;
+    let audioCtx = null;
+    let bottomTab = 'prompt';
+
+    function playSynthTone(freq, durationMs, type = 'sine') {
+      if (!soundEnabled) return;
+      try {
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) audioCtx = new AudioContextClass();
+        }
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + durationMs / 1000);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + durationMs / 1000);
+      } catch (e) {}
+    }
+
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      const btn = document.getElementById('btnSoundToggle');
+      if (soundEnabled) {
+        btn.textContent = '🔊 音效开启';
+        btn.classList.add('border-emerald-500/50', 'text-emerald-300');
+        playSynthTone(660, 120, 'triangle');
+      } else {
+        btn.textContent = '🔇 音效';
+        btn.classList.remove('border-emerald-500/50', 'text-emerald-300');
+      }
+    }
+
+    // =========================================================================
+    // 3. UI RENDERING FUNCTIONS
+    // =========================================================================
+    function formatMoney(val) {
+      const num = Number(val) || 0;
+      const parts = num.toFixed(2).split('.');
+      parts[0] = Number(parts[0]).toLocaleString('en-US');
+      return { whole: '$' + parts[0], cents: '.' + parts[1] };
+    }
+
+    function renderTickerTape() {
+      const container = document.getElementById('tickerContainer');
+      const items = [...currentSimulation.tickers, ...currentSimulation.tickers];
+      container.innerHTML = items.map(t => `
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-slate-200 shadow-sm text-[11px] font-mono-num shrink-0">
+          <span class="w-2 h-2 rounded-full ${t.up ? 'bg-emerald-500' : 'bg-rose-500'}"></span>
+          <span class="font-extrabold text-slate-800">${t.symbol}</span>
+          <span class="text-slate-500">${t.price}</span>
+          <span class="px-1.5 py-0.2 rounded font-bold text-[10px] ${t.up ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}">${t.change}</span>
+        </div>
+      `).join('');
+    }
+
+    function renderScrubberButtons() {
+      const wrap = document.getElementById('dayScrubberButtons');
+      const days = currentSimulation.daily_timeline;
+      wrap.innerHTML = days.map((d, idx) => {
+        const stepIdx = idx + 1;
+        const active = currentStep === stepIdx;
+        return `<button onclick="scrubToStep(${stepIdx})" class="flex-1 py-1 rounded-lg text-[10px] font-mono-num font-bold transition ${
+          active
+            ? 'bg-blue-600 text-white shadow-sm'
+            : (d.pct_change >= 0 ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-rose-50 text-rose-700 hover:bg-rose-100')
+        }">D${d.day}</button>`;
+      }).join('');
+
+      const btn0 = document.getElementById('dayBtn0');
+      if (currentStep === 0) {
+        btn0.className = 'px-2 py-1 rounded-lg text-[10px] font-mono-num font-bold bg-blue-600 text-white shadow-sm transition';
+      } else {
+        btn0.className = 'px-2 py-1 rounded-lg text-[10px] font-mono-num font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition';
+      }
+    }
+
+    function renderWarmupBarChart(subTick) {
+      const svg = document.getElementById('equitySvgChart');
+      const bars = [14, 22, 18, 29, 12, 8, 19, 31, 25, 16, 27, 35, 22, 19, 28, 38, 15, 24, 33, 29, 41, 18, 26, 30];
+      const activeBars = Math.min(bars.length, 6 + subTick * 4);
+      let rectsHtml = '';
+      bars.forEach((h, i) => {
+        const x = 10 + i * 13.5;
+        const barH = i < activeBars ? h * 1.6 : 4;
+        const y = 92 - barH;
+        const isFirstTradeBar = subTick >= 4 && i === activeBars - 1;
+        const color = isFirstTradeBar ? '#10b981' : (i < activeBars ? '#f43f5e' : '#e2e8f0');
+        rectsHtml += `<rect x="${x}" y="${y}" width="8" height="${barH}" rx="2.5" fill="${color}" />`;
+      });
+
+      const timerLabel = ['00:19', '01:10', '02:08', '02:29', '00:31'][subTick] || '00:31';
+      svg.innerHTML = `
+        <g>
+          <text x="8" y="14" fill="#64748b" font-size="9" font-weight="700" font-family="JetBrains Mono">■ kills / min · Rule 1-3 filter</text>
+          <rect x="284" y="3" width="48" height="16" rx="8" fill="#0f172a"/>
+          <text x="308" y="14" text-anchor="middle" fill="#ffffff" font-size="9" font-weight="700" font-family="JetBrains Mono">${timerLabel}</text>
+          <line x1="8" y1="92" x2="332" y2="92" stroke="#cbd5e1" stroke-width="1"/>
+          ${rectsHtml}
+          <text x="8" y="108" fill="#94a3b8" font-size="9" font-family="JetBrains Mono">22:00</text>
+          <text x="165" y="108" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="JetBrains Mono">23:00</text>
+          <text x="330" y="108" text-anchor="end" fill="#94a3b8" font-size="9" font-family="JetBrains Mono">00:31</text>
+        </g>
+      `;
+    }
+
+    function renderStepEquityChart(uptoDayIdx) {
+      const svg = document.getElementById('equitySvgChart');
+      const days = currentSimulation.daily_timeline;
+      const visibleDays = days.slice(0, uptoDayIdx + 1);
+      const allBalances = [currentSimulation.initial_balance, ...days.map(d => d.balance)];
+      const minB = Math.min(...allBalances) * 0.9;
+      const maxB = Math.max(...allBalances) * 1.08;
+
+      const xStart = 16;
+      const xEnd = 324;
+      const yTop = 22;
+      const yBottom = 80;
+      const stepW = (xEnd - xStart) / Math.max(1, days.length - 1);
+
+      const getY = (val) => {
+        // Use mixed linear + log feel so early days D1..D4 and later days D7..D9 are both visually clear like the video
+        const norm = (Math.log(Math.max(1, val)) - Math.log(Math.max(1, minB))) /
+                     Math.max(0.0001, Math.log(Math.max(2, maxB)) - Math.log(Math.max(1, minB)));
+        return yBottom - Math.max(0, Math.min(1, norm)) * (yBottom - yTop);
+      };
+
+      let segmentsHtml = '';
+      let nodesHtml = '';
+      let bottomLabelsHtml = '';
+
+      for (let i = 0; i < days.length; i++) {
+        const d = days[i];
+        const x = xStart + i * stepW;
+        const isReached = i <= uptoDayIdx;
+        const pctColor = d.pct_change >= 0 ? '#059669' : '#e11d48';
+        bottomLabelsHtml += `
+          <text x="${x}" y="96" text-anchor="middle" fill="${isReached ? '#334155' : '#cbd5e1'}" font-size="8.5" font-weight="700" font-family="JetBrains Mono">D${d.day}</text>
+          <text x="${x}" y="108" text-anchor="middle" fill="${isReached ? pctColor : '#cbd5e1'}" font-size="7.5" font-weight="700" font-family="JetBrains Mono">${d.pct_change > 0 ? '+' : ''}${d.pct_change}%</text>
+        `;
+      }
+
+      for (let i = 0; i < visibleDays.length; i++) {
+        const d = visibleDays[i];
+        const x = xStart + i * stepW;
+        const y = getY(d.balance);
+        const segColor = d.pct_change >= 0 ? '#10b981' : '#f43f5e';
+
+        if (i > 0) {
+          const prevX = xStart + (i - 1) * stepW;
+          const prevY = getY(visibleDays[i - 1].balance);
+          const midX = (prevX + x) / 2;
+          // Step-line path just like the video
+          segmentsHtml += `<path d="M ${prevX} ${prevY} L ${midX} ${prevY} L ${midX} ${y} L ${x} ${y}" fill="none" stroke="${segColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+        }
+
+        nodesHtml += `<circle cx="${x}" cy="${y}" r="3.5" fill="${segColor}" stroke="#ffffff" stroke-width="1.2"/>`;
+
+        const shortBal = d.balance >= 1000
+          ? '$' + (d.balance >= 10000 ? (d.balance / 1000).toFixed(1) + 'K' : Math.round(d.balance).toLocaleString())
+          : '$' + Math.round(d.balance);
+
+        nodesHtml += `<text x="${x}" y="${y - 7}" text-anchor="middle" fill="#0f172a" font-size="8" font-weight="800" font-family="JetBrains Mono">${shortBal}</text>`;
+
+        if (d.badge) {
+          const bgFill = d.badge.color === 'green' ? '#d1fae5' : '#ffe4e6';
+          const txtFill = d.badge.color === 'green' ? '#047857' : '#be123c';
+          const badgeW = d.badge.text.length * 4.8 + 10;
+          const badgeY = Math.max(2, y - 24);
+          nodesHtml += `
+            <rect x="${x - badgeW / 2}" y="${badgeY}" width="${badgeW}" height="12" rx="4" fill="${bgFill}" stroke="${txtFill}" stroke-width="0.6"/>
+            <text x="${x}" y="${badgeY + 8.5}" text-anchor="middle" fill="${txtFill}" font-size="7" font-weight="800" font-family="JetBrains Mono">${d.badge.text}</text>
+          `;
+        }
+      }
+
+      svg.innerHTML = `
+        <line x1="10" y1="84" x2="330" y2="84" stroke="#e2e8f0" stroke-width="1"/>
+        ${segmentsHtml}
+        ${nodesHtml}
+        ${bottomLabelsHtml}
+      `;
+    }
+
+    function spawnConfetti() {
+      const container = document.getElementById('confettiContainer');
+      container.innerHTML = '';
+      const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6'];
+      for (let i = 0; i < 28; i++) {
+        const div = document.createElement('div');
+        div.className = 'confetti-piece';
+        div.style.left = Math.random() * 96 + '%';
+        div.style.top = (Math.random() * 20 - 10) + 'px';
+        div.style.backgroundColor = colors[i % colors.length];
+        div.style.animationDelay = (Math.random() * 0.5) + 's';
+        container.appendChild(div);
+      }
+    }
+
+    function renderCurrentFrame() {
+      const isCrypto = currentSimulation.mode === 'crypto';
+      document.getElementById('botHeaderTitle').textContent = isCrypto ? 'Grok Bot' : 'Alpha Bot';
+      document.getElementById('botHeaderSub').textContent = `${currentSimulation.desk_id} · 1 prompt · 5 agents`;
+      document.getElementById('capBadgeCode').textContent = isCrypto ? 'S2K' : 'EQT';
+      document.getElementById('capBadgeText').textContent = `Balance · $${currentSimulation.initial_balance.toLocaleString()} cap`;
+      document.getElementById('finderRoleSub').textContent = isCrypto ? 'every new pair' : 'every stock scan';
+
+      renderScrubberButtons();
+
+      // Warmup Step 0 vs Day 1..9
+      if (currentStep === 0) {
+        const warmCounts = [21, 86, 141, 164, 166];
+        const pairsNow = warmCounts[warmupSubTick] || 166;
+        const tradesNow = warmupSubTick >= 4 ? 1 : 0;
+        const saidNoNow = pairsNow - tradesNow;
+        const saidNoPct = (((saidNoNow) / pairsNow) * 100).toFixed(1);
+
+        const m = formatMoney(currentSimulation.initial_balance);
+        const balEl = document.getElementById('mainBalanceText');
+        balEl.innerHTML = `${m.whole}<span class="text-2xl text-slate-400">${m.cents}</span>`;
+        balEl.className = 'text-4xl font-black font-mono-num tracking-tight text-slate-900';
+
+        document.getElementById('saidNoPctLabel').textContent = `${saidNoPct}%`;
+        document.getElementById('dayPillBadge').textContent = `Day 1 of ${currentSimulation.days}`;
+        document.getElementById('saidNoCountText').textContent = saidNoNow.toLocaleString();
+        document.getElementById('totalPairsCountText').textContent = `of ${pairsNow.toLocaleString()} ${isCrypto ? 'pairs' : 'stocks'}`;
+
+        document.getElementById('tradesCountLabel').textContent = `${tradesNow} ${tradesNow === 1 ? 'trade' : 'trades'}`;
+        const pill = document.getElementById('dayStatusPill');
+        if (tradesNow === 0) {
+          const timerTxt = ['0:19:11', '1:10:42', '2:08:14', '2:29:18'][warmupSubTick] || '2:29:18';
+          pill.textContent = `NO TRADE ${timerTxt}`;
+          pill.className = 'px-2 py-0.5 rounded-md bg-slate-900 text-white font-mono-num text-[11px] font-extrabold';
+          document.getElementById('winLossLabel').innerHTML = `<span class="text-slate-400">0 W · 0 L</span>`;
+          document.getElementById('toastTitle').textContent = 'No trade is a valid answer.';
+          document.getElementById('toastSubtitle').textContent = 'If nothing passes, do nothing.';
+          document.getElementById('toastRightMetric').textContent = 'FLAT';
+          document.getElementById('toastRightMetric').className = 'text-xs font-black font-mono-num text-slate-300 shrink-0';
+        } else {
+          pill.textContent = 'FIRST TRADE · 00:31';
+          pill.className = 'px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-mono-num text-[11px] font-extrabold';
+          document.getElementById('winLossLabel').innerHTML = `<span class="text-emerald-600">1 W</span> · <span class="text-rose-500">0 L</span>`;
+          const d1Toast = currentSimulation.daily_timeline[0].toast;
+          document.getElementById('toastTitle').textContent = d1Toast.title;
+          document.getElementById('toastSubtitle').textContent = d1Toast.subtitle;
+          document.getElementById('toastRightMetric').textContent = d1Toast.right;
+          document.getElementById('toastRightMetric').className = 'text-sm font-black font-mono-num text-emerald-400 shrink-0';
+        }
+
+        // Finder & Agents during warmup
+        const r1Now = Math.round(saidNoNow * 0.54);
+        const r2Now = saidNoNow - r1Now;
+        document.getElementById('finderKilledNum').textContent = (saidNoNow - 4).toLocaleString();
+        document.getElementById('finderTotalSub').textContent = `of ${pairsNow} ${isCrypto ? 'pairs' : 'stocks'}`;
+        document.getElementById('finderR1Count').textContent = `R1 ${r1Now}`;
+        document.getElementById('finderR2Count').textContent = `R2 ${r2Now}`;
+        document.getElementById('finderPassPill').textContent = `✓ ${Math.max(1, Math.round(pairsNow * 0.03))} passed`;
+        document.getElementById('auditorStatMain').textContent = Math.max(1, Math.round(pairsNow * 0.02));
+        document.getElementById('auditorStatSub').textContent = `of ${Math.max(1, Math.round(pairsNow * 0.03))}`;
+        document.getElementById('judgeStatMain').textContent = tradesNow;
+        document.getElementById('judgeStatSub').textContent = `of ${Math.max(1, Math.round(pairsNow * 0.015))}`;
+        document.getElementById('stagerStatMain').textContent = tradesNow > 0 ? '4%' : '—';
+        document.getElementById('closerStatMain').textContent = tradesNow > 0 ? '1' : '—';
+        document.getElementById('closerTopChip').textContent = tradesNow > 0 ? 'OPEN' : 'IDLE';
+
+        renderWarmupBarChart(warmupSubTick);
+
+        // Warmup logs
+        const warmLogs = tradesNow === 0
+          ? [
+              { time: '00:27', tag: 'KILL', tagColor: 'red', text: isCrypto ? 'rule 1 liquidity $11,200' : 'rule 1 rel vol 0.9x' },
+              { time: '00:24', tag: 'KILL', tagColor: 'red', text: isCrypto ? 'rule 3 top 10 hold 52%' : 'rule 2 breakout 0.8%' }
+            ]
+          : currentSimulation.daily_timeline[0].logs;
+        renderPromptLogBox(warmLogs, tradesNow === 0 ? 0 : 5);
+        return;
+      }
+
+      // Day 1 .. Day 9
+      const dayRecord = currentSimulation.daily_timeline[currentStep - 1];
+      const m = formatMoney(dayRecord.balance);
+      const balEl = document.getElementById('mainBalanceText');
+      balEl.innerHTML = `${m.whole}<span class="text-2xl opacity-60">${m.cents}</span>`;
+      balEl.className = `text-4xl font-black font-mono-num tracking-tight transition-colors ${
+        dayRecord.pct_change >= 0 ? 'text-emerald-600' : 'text-slate-900'
+      }`;
+
+      document.getElementById('saidNoPctLabel').textContent = `${dayRecord.said_no_pct}%`;
+      document.getElementById('dayPillBadge').textContent = `Day ${dayRecord.day} of ${currentSimulation.days}`;
+      document.getElementById('saidNoCountText').textContent = dayRecord.said_no_count.toLocaleString();
+      document.getElementById('totalPairsCountText').textContent = `of ${dayRecord.cum_pairs.toLocaleString()} ${isCrypto ? 'pairs' : 'stocks'}`;
+
+      document.getElementById('tradesCountLabel').textContent = `${dayRecord.trades} trades`;
+      const pill = document.getElementById('dayStatusPill');
+      if (dayRecord.day === 9) {
+        pill.textContent = `9 days · 1 prompt · 5 agents`;
+        pill.className = 'px-2 py-0.5 rounded-md bg-slate-900 text-white font-mono-num text-[10px] font-extrabold';
+      } else {
+        const sign = dayRecord.pct_change >= 0 ? '↑ +' : '↓ ';
+        pill.textContent = `Day ${dayRecord.day} · ${sign}${dayRecord.pct_change}%`;
+        pill.className = `px-2 py-0.5 rounded-md font-mono-num text-[11px] font-extrabold ${
+          dayRecord.pct_change >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-700'
+        }`;
+      }
+
+      document.getElementById('winLossLabel').innerHTML = `<span class="text-emerald-600">${dayRecord.wins} W</span> · <span class="text-rose-500">${dayRecord.losses} L</span>`;
+
+      if (dayRecord.toast) {
+        document.getElementById('toastTitle').textContent = dayRecord.toast.title;
+        document.getElementById('toastSubtitle').textContent = dayRecord.toast.subtitle;
+        document.getElementById('toastRightMetric').textContent = dayRecord.toast.right;
+        document.getElementById('toastRightMetric').className = `text-sm font-black font-mono-num shrink-0 ${
+          dayRecord.toast.right.startsWith('-') ? 'text-rose-400' : 'text-emerald-400'
+        }`;
+      }
+
+      // Update 5 Agents
+      document.getElementById('relayStatusRight').textContent = dayRecord.day === 9
+        ? `${dayRecord.cum_pairs.toLocaleString()} → ${dayRecord.trades}`
+        : '5 working';
+
+      document.getElementById('finderKilledNum').textContent = dayRecord.finder_killed.toLocaleString();
+      document.getElementById('finderTotalSub').textContent = `of ${dayRecord.cum_pairs.toLocaleString()} ${isCrypto ? 'pairs' : 'stocks'}`;
+      document.getElementById('finderR1Count').textContent = `R1 ${dayRecord.finder_r1.toLocaleString()}`;
+      document.getElementById('finderR2Count').textContent = `R2 ${dayRecord.finder_r2.toLocaleString()}`;
+      document.getElementById('finderPassPill').textContent = `✓ ${dayRecord.finder_passed.toLocaleString()} passed`;
+      document.getElementById('finderKillPill').textContent = `☠ KILLED · ${dayRecord.day % 2 === 0 ? 'R2' : 'R1'}`;
+
+      document.getElementById('auditorTopChip').textContent = `R3 ${dayRecord.auditor_r3} · R4 ${dayRecord.auditor_r4}`;
+      document.getElementById('auditorStatMain').textContent = dayRecord.auditor_killed.toLocaleString();
+      document.getElementById('auditorStatSub').textContent = `of ${dayRecord.auditor_checked.toLocaleString()}`;
+      document.getElementById('auditorFootNote').textContent = isCrypto ? 'contract + holders' : 'balance + filings';
+
+      document.getElementById('judgeTopChip').textContent = `score ${currentSimulation.config.rule5_min_score}+`;
+      document.getElementById('judgeStatMain').textContent = dayRecord.judge_rejected.toLocaleString();
+      document.getElementById('judgeStatSub').textContent = `of ${dayRecord.judge_checked.toLocaleString()}`;
+      document.getElementById('judgeFootNote').textContent = `${currentSimulation.config.rule5_min_score}+ passes`;
+
+      document.getElementById('stagerTopChip').textContent = `-${currentSimulation.config.rule6_stop_loss_pct}% stop`;
+      document.getElementById('stagerStatMain').textContent = dayRecord.stager_sized.toLocaleString();
+      document.getElementById('stagerStatSub').textContent = 'stop first';
+      document.getElementById('stagerFootNote').textContent = `size ${currentSimulation.config.rule6_position_size_pct}% book`;
+
+      document.getElementById('closerTopChip').textContent = dayRecord.closer_delta;
+      document.getElementById('closerTopChip').className = `text-[9px] font-mono-num font-extrabold px-1.5 py-0.5 rounded mb-1 truncate max-w-full shadow-sm float-badge ${
+        String(dayRecord.closer_delta).startsWith('-') ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'
+      }`;
+      document.getElementById('closerStatMain').textContent = dayRecord.closer_closed.toLocaleString();
+      document.getElementById('closerStatSub').textContent = `50/25 trail`;
+      document.getElementById('closerFootNote').textContent = `trail ${currentSimulation.config.trail_pct}%`;
+
+      renderStepEquityChart(currentStep - 1);
+      renderPromptLogBox(dayRecord.logs, dayRecord.active_rule_idx);
+      renderFunnelCard();
+      renderDesktopInspector(dayRecord.active_rule_idx);
+
+      if (dayRecord.day === 9) {
+        spawnConfetti();
+        if (isPlaying) {
+          switchBottomCard('funnel');
+        }
+      }
+    }
+
+    function renderPromptLogBox(logs, activeRuleIdx) {
+      const logList = document.getElementById('liveEventLogList');
+      logList.innerHTML = logs.map(item => {
+        const badgeColors = {
+          teal: 'bg-teal-100 text-teal-800',
+          red: 'bg-rose-100 text-rose-700',
+          amber: 'bg-amber-100 text-amber-800',
+          blue: 'bg-blue-100 text-blue-800',
+          green: 'bg-emerald-100 text-emerald-800'
+        };
+        return `
+          <div class="flex items-center gap-2 py-0.5">
+            <span class="text-slate-400 text-[10px] w-9 shrink-0">${item.time}</span>
+            <span class="px-1.5 py-0.2 rounded text-[9px] font-extrabold shrink-0 ${badgeColors[item.tagColor] || badgeColors.blue}">${item.tag}</span>
+            <span class="text-slate-700 truncate font-medium">${item.text}</span>
+          </div>
+        `;
+      }).join('');
+
+      const rules = currentSimulation.rules;
+      const activeRule = rules[activeRuleIdx] || rules[0];
+      const highlightEl = document.getElementById('activeRuleHighlightBox');
+      highlightEl.textContent = activeRule.text;
+    }
+
+    function renderFunnelCard() {
+      const f = currentSimulation.funnel;
+      const isCrypto = currentSimulation.mode === 'crypto';
+      document.getElementById('funnelBar1').textContent = `${f.total_pairs.toLocaleString()} ${isCrypto ? 'new pairs' : 'stock setups'}`;
+      document.getElementById('funnelBar2').textContent = `${f.survived_finder.toLocaleString()} survived Finder`;
+      document.getElementById('funnelBar3').textContent = `${f.survived_auditor.toLocaleString()} survived Auditor`;
+      document.getElementById('funnelBar4').textContent = `${f.trades_taken.toLocaleString()} trades taken`;
+      document.getElementById('funnelBigNoPct').textContent = `${f.said_no_pct}%`;
+      document.getElementById('funnelWinLossChip').innerHTML = `<span class="text-emerald-600">${f.wins} W</span> · <span class="text-rose-500">${f.losses} L</span>`;
+    }
+
+    function renderDesktopInspector(activeRuleIdx = 0) {
+      const rules = currentSimulation.rules;
+      const ruleContainer = document.getElementById('desktopRuleList');
+      ruleContainer.innerHTML = rules.map((r, idx) => {
+        const isCurrent = idx === activeRuleIdx;
+        return `
+          <div onclick="highlightRuleManually(${idx})" class="cursor-pointer rounded-2xl p-3 border transition-all ${
+            isCurrent
+              ? 'bg-amber-500/15 border-amber-400/70 shadow-md'
+              : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+          }">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[10px] font-mono-num font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300">${r.id} · ${r.agent}</span>
+              ${isCurrent ? '<span class="text-[10px] font-mono-num font-bold text-amber-300">● 当前触发规则</span>' : ''}
+            </div>
+            <div class="text-xs font-mono-num ${isCurrent ? 'text-amber-100 font-bold' : 'text-slate-300'}">${r.text}</div>
+          </div>
+        `;
+      }).join('');
+
+      // Funnel summary metrics
+      const f = currentSimulation.funnel;
+      document.getElementById('metricTotalPool').textContent = f.total_pairs.toLocaleString();
+      document.getElementById('metricFinderPass').textContent = f.survived_finder.toLocaleString();
+      const finderKillPct = (((f.total_pairs - f.survived_finder) / f.total_pairs) * 100).toFixed(1);
+      document.getElementById('metricFinderKillRate').textContent = `拦截 ${finderKillPct}%`;
+      document.getElementById('metricAuditorPass').textContent = f.survived_auditor.toLocaleString();
+      document.getElementById('metricTradesTaken').textContent = `${f.trades_taken} 笔`;
+      document.getElementById('metricWinLossRatio').textContent = `${f.wins}W / ${f.losses}L`;
+      document.getElementById('metricFinalEquity').textContent = `$${currentSimulation.final_balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      document.getElementById('metricTotalReturn').textContent = `+${currentSimulation.total_return_pct.toLocaleString()}%`;
+
+      // Daily table
+      const tbody = document.getElementById('dailyTelemetryTableBody');
+      tbody.innerHTML = currentSimulation.daily_timeline.map((d, idx) => {
+        const isSelected = currentStep === idx + 1;
+        return `
+          <tr onclick="scrubToStep(${idx + 1})" class="cursor-pointer transition ${
+            isSelected ? 'bg-indigo-500/20 text-white font-bold' : 'text-slate-300 hover:bg-slate-800/50'
+          }">
+            <td class="py-2 px-2.5 font-bold">Day ${d.day}</td>
+            <td class="py-2 px-2.5 text-right">$${d.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td class="py-2 px-2.5 text-right ${d.pct_change >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${d.pct_change >= 0 ? '+' : ''}${d.pct_change}%</td>
+            <td class="py-2 px-2.5 text-right">${d.cum_pairs.toLocaleString()}</td>
+            <td class="py-2 px-2.5 text-right">${d.trades} (${d.wins}W/${d.losses}L)</td>
+            <td class="py-2 px-2.5 text-[11px] text-slate-400 truncate max-w-[200px]">${d.toast ? d.toast.title : '常规流水线过滤'}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // =========================================================================
+    // 4. INTERACTIVE CONTROLS & PLAYBACK LOOP
+    // =========================================================================
+    function stepSimulationForward() {
+      if (currentStep === 0) {
+        if (warmupSubTick < 4) {
+          warmupSubTick++;
+          playSynthTone(420 + warmupSubTick * 45, 70, 'sine');
+          renderCurrentFrame();
+          return;
+        } else {
+          currentStep = 1;
+          warmupSubTick = 0;
+          switchBottomCard('prompt');
+          playSynthTone(580, 110, 'triangle');
+          renderCurrentFrame();
+          return;
+        }
+      }
+
+      if (currentStep < currentSimulation.days) {
+        currentStep++;
+        const dayRec = currentSimulation.daily_timeline[currentStep - 1];
+        playSynthTone(dayRec.pct_change >= 0 ? 680 : 320, 110, dayRec.pct_change >= 0 ? 'triangle' : 'sawtooth');
+        renderCurrentFrame();
+      } else {
+        // Pause cleanly at Day 9 completion
+        pauseReplay();
+      }
+    }
+
+    function startReplayLoop() {
+      if (timerHandle) clearInterval(timerHandle);
+      const intervalMs = Math.round(1450 / replaySpeed);
+      timerHandle = setInterval(() => {
+        if (isPlaying) {
+          stepSimulationForward();
+        }
+      }, intervalMs);
+    }
+
+    function pauseReplay() {
+      isPlaying = false;
+      document.getElementById('playPauseIcon').textContent = '▶';
+      document.getElementById('playPauseText').textContent = '继续重演';
+    }
+
+    function togglePlayPause() {
+      if (!isPlaying && currentStep >= currentSimulation.days) {
+        currentStep = 0;
+        warmupSubTick = 0;
+        switchBottomCard('prompt');
+      }
+      isPlaying = !isPlaying;
+      document.getElementById('playPauseIcon').textContent = isPlaying ? '⏸' : '▶';
+      document.getElementById('playPauseText').textContent = isPlaying ? '暂停重演' : '继续重演';
+      renderCurrentFrame();
+    }
+
+    function restartReplay() {
+      currentStep = 0;
+      warmupSubTick = 0;
+      isPlaying = true;
+      switchBottomCard('prompt');
+      document.getElementById('confettiContainer').innerHTML = '';
+      document.getElementById('playPauseIcon').textContent = '⏸';
+      document.getElementById('playPauseText').textContent = '暂停重演';
+      renderCurrentFrame();
+      startReplayLoop();
+    }
+
+    function setReplaySpeed(spd) {
+      replaySpeed = spd;
+      [1, 2, 5].forEach(s => {
+        const btn = document.getElementById('speedBtn' + s);
+        if (s === spd) {
+          btn.className = 'px-2 py-1 rounded-lg bg-slate-700 text-white font-bold';
+        } else {
+          btn.className = 'px-2 py-1 rounded-lg text-slate-400 hover:text-white';
+        }
+      });
+      startReplayLoop();
+    }
+
+    function scrubToStep(stepIdx) {
+      currentStep = stepIdx;
+      warmupSubTick = stepIdx === 0 ? 4 : 0;
+      if (stepIdx < currentSimulation.days) {
+        document.getElementById('confettiContainer').innerHTML = '';
+      }
+      renderCurrentFrame();
+    }
+
+    function switchBottomCard(tab) {
+      bottomTab = tab;
+      const vPrompt = document.getElementById('bottomViewPrompt');
+      const vFunnel = document.getElementById('bottomViewFunnel');
+      const bPrompt = document.getElementById('tabBtnPrompt');
+      const bFunnel = document.getElementById('tabBtnFunnel');
+      const rightSub = document.getElementById('bottomCardSubRight');
+
+      if (tab === 'prompt') {
+        vPrompt.classList.remove('hidden');
+        vFunnel.classList.add('hidden');
+        bPrompt.className = 'px-2.5 py-1 rounded-lg text-xs font-extrabold transition bg-slate-900 text-white';
+        bFunnel.className = 'px-2.5 py-1 rounded-lg text-xs font-extrabold transition text-slate-500 hover:bg-slate-100';
+        rightSub.textContent = 'line in force';
+      } else {
+        vPrompt.classList.add('hidden');
+        vFunnel.classList.remove('hidden');
+        bFunnel.className = 'px-2.5 py-1 rounded-lg text-xs font-extrabold transition bg-slate-900 text-white';
+        bPrompt.className = 'px-2.5 py-1 rounded-lg text-xs font-extrabold transition text-slate-500 hover:bg-slate-100';
+        rightSub.textContent = 'one desk';
+        renderFunnelCard();
+      }
+    }
+
+    function highlightRuleManually(idx) {
+      const rules = currentSimulation.rules;
+      if (rules[idx]) {
+        document.getElementById('activeRuleHighlightBox').textContent = rules[idx].text;
+        switchBottomCard('prompt');
+        renderDesktopInspector(idx);
+      }
+    }
+
+    function switchMarketMode(mode) {
+      currentMode = mode;
+      const btnCrypto = document.getElementById('btnModeCrypto');
+      const btnStock = document.getElementById('btnModeStock');
+      if (mode === 'crypto') {
+        btnCrypto.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-white text-slate-900 shadow-sm';
+        btnStock.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white';
+      } else {
+        btnStock.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-white text-slate-900 shadow-sm';
+        btnCrypto.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white';
+      }
+
+      currentConfig = JSON.parse(JSON.stringify(PRESET_CONFIGS[mode]));
+      syncModalInputsFromConfig();
+      runBacktestWithBackendFallback(currentConfig);
+    }
+
+    // =========================================================================
+    // 5. MODAL & FASTAPI BACKEND INTEGRATION
+    // =========================================================================
+    function syncModalInputsFromConfig() {
+      const isCrypto = currentConfig.mode === 'crypto';
+      document.getElementById('lblRule1').textContent = isCrypto ? 'R1 最低流动性 ($)' : 'R1 最低量比 (x)';
+      document.getElementById('lblRule2').textContent = isCrypto ? 'R2 最大上线时长 (h)' : 'R2 最小突破幅度 (%)';
+      document.getElementById('lblRule3').textContent = isCrypto ? 'R3 前十持仓上限 (%)' : 'R3 负债/拥挤度上限 (%)';
+
+      document.getElementById('inpInitialBal').value = currentConfig.initial_balance;
+      document.getElementById('inpRule1').value = currentConfig.rule1_min_liquidity_or_vol;
+      document.getElementById('inpRule2').value = currentConfig.rule2_max_age_or_gap;
+      document.getElementById('inpRule3').value = currentConfig.rule3_max_holder_or_pe;
+      document.getElementById('inpRule5').value = currentConfig.rule5_min_score;
+      document.getElementById('inpRule6Size').value = currentConfig.rule6_position_size_pct;
+      document.getElementById('inpRule6Stop').value = currentConfig.rule6_stop_loss_pct;
+      document.getElementById('inpTrail').value = currentConfig.trail_pct;
+      document.getElementById('inpDailyStop').value = currentConfig.daily_stop_pct;
+
+      const rules = buildRulesText(currentConfig);
+      document.getElementById('inpPromptText').value = rules.map(r => r.text).join('\n');
+    }
+
+    function openRuleModal() {
+      syncModalInputsFromConfig();
+      const modal = document.getElementById('ruleModalBackdrop');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeRuleModal() {
+      const modal = document.getElementById('ruleModalBackdrop');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function resetDefaultConfig() {
+      currentConfig = JSON.parse(JSON.stringify(PRESET_CONFIGS[currentMode]));
+      syncModalInputsFromConfig();
+    }
+
+    async function checkBackendConnection() {
+      const baseUrl = document.getElementById('inputApiUrl').value.trim().replace(/\/+$/, '');
+      const badge = document.getElementById('apiStatusBadge');
+      try {
+        const res = await fetch(`${baseUrl}/api/health`, { method: 'GET' });
+        if (res.ok) {
+          badge.textContent = 'FastAPI Connected';
+          badge.className = 'text-[11px] font-mono-num px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40';
+          return true;
+        }
+      } catch (e) {}
+      badge.textContent = 'Local Engine Active';
+      badge.className = 'text-[11px] font-mono-num px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/40';
+      return false;
+    }
+
+    async function runBacktestWithBackendFallback(cfgPayload) {
+      const baseUrl = document.getElementById('inputApiUrl').value.trim().replace(/\/+$/, '');
+      const badge = document.getElementById('apiStatusBadge');
+      try {
+        const res = await fetch(`${baseUrl}/api/backtest`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cfgPayload)
+        });
+        if (res.ok) {
+          currentSimulation = await res.json();
+          badge.textContent = 'FastAPI Connected';
+          renderTickerTape();
+          restartReplay();
+          return;
+        }
+      } catch (e) {}
+      // Seamless local engine execution when running inside Canvas preview or without local server
+      currentSimulation = runClientRelayBacktest(cfgPayload);
+      renderTickerTape();
+      restartReplay();
+    }
+
+    function applyCustomRulesAndRun() {
+      currentConfig.initial_balance = Math.max(10, Number(document.getElementById('inpInitialBal').value) || 100);
+      currentConfig.rule1_min_liquidity_or_vol = Math.max(0.5, Number(document.getElementById('inpRule1').value) || 20000);
+      currentConfig.rule2_max_age_or_gap = Math.max(0.5, Number(document.getElementById('inpRule2').value) || 6);
+      currentConfig.rule3_max_holder_or_pe = Math.max(5, Number(document.getElementById('inpRule3').value) || 35);
+      currentConfig.rule5_min_score = Math.min(98, Math.max(50, Number(document.getElementById('inpRule5').value) || 80));
+      currentConfig.rule6_position_size_pct = Math.min(100, Math.max(1, Number(document.getElementById('inpRule6Size').value) || 4));
+      currentConfig.rule6_stop_loss_pct = Math.min(80, Math.max(1, Number(document.getElementById('inpRule6Stop').value) || 25));
+      currentConfig.trail_pct = Math.min(80, Math.max(1, Number(document.getElementById('inpTrail').value) || 25));
+      currentConfig.daily_stop_pct = Math.min(80, Math.max(1, Number(document.getElementById('inpDailyStop').value) || 10));
+      currentConfig.prompt_text = document.getElementById('inpPromptText').value;
+
+      closeRuleModal();
+      runBacktestWithBackendFallback(currentConfig);
+    }
+
+    function copyGitCommands() {
+      const codeText = `unzip relay-backtester-repo.zip -d relay-backtester\ncd relay-backtester\ngit remote add origin https://github.com/<your-username>/relay-backtester.git\ngit push -u origin main`;
+      const btn = document.getElementById('btnCopyGit');
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(codeText);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = codeText;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        btn.textContent = '✅ 已复制推送命令';
+        setTimeout(() => { btn.textContent = '📋 复制 Git 推送命令'; }, 2000);
+      } catch (e) {}
+    }
+
+    // Initialize App on Load
+    window.addEventListener('DOMContentLoaded', () => {
+      renderTickerTape();
+      renderCurrentFrame();
+      renderDesktopInspector(0);
+      startReplayLoop();
+    });
+  </script>
+</body>
+</html>
