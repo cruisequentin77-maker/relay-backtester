@@ -1,0 +1,12 @@
+# Render Blueprint. Free web service, one container, same origin for UI and API.
+# Apply from the Render dashboard after connecting this repo. This file does not deploy by itself.
+services:
+  - type: web
+    name: relay-backtester
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: RELAY_ALLOW_REMOTE
+        value: "0"

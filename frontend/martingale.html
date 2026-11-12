@@ -20,7 +20,7 @@
         <a href="/" class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 font-black text-sm">RB</a>
         <div>
           <div class="text-white font-bold text-sm">创业板指 · 马丁格尔回测</div>
-          <div class="text-[11px] text-slate-400">399006 日线 · 下跌加倍 · 均价止盈</div>
+          <div class="text-[11px] text-slate-400">399006 仓库打包的公开日线 · 不是合成数据，也不是实时行情</div>
         </div>
       </div>
       <a href="/" class="text-xs text-slate-300 border border-slate-700 rounded-lg px-3 py-1.5 hover:bg-slate-800">返回重演看板</a>
@@ -102,7 +102,14 @@
   </main>
 
   <script>
-    const API = "http://127.0.0.1:8000";
+    function apiBase() {
+      const host = location.hostname;
+      if ((host === "localhost" || host === "127.0.0.1") && location.port === "5173") {
+        return "http://127.0.0.1:8000";
+      }
+      return "";
+    }
+    const API = apiBase();
 
     const pct = (value) => (value * 100).toFixed(2) + "%";
     const yuan = (value) => "¥" + Math.round(value).toLocaleString("zh-CN");

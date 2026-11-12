@@ -1,0 +1,98 @@
+{
+  "000300": {
+    "vendor": "eastmoney",
+    "name": "沪深300",
+    "adjust": "none",
+    "rows": 2149,
+    "start": "2018-01-02",
+    "end": "2026-11-12"
+  },
+  "000905": {
+    "vendor": "eastmoney",
+    "name": "中证500",
+    "adjust": "none",
+    "rows": 2149,
+    "start": "2018-01-02",
+    "end": "2026-11-12"
+  },
+  "000016": {
+    "vendor": "eastmoney",
+    "name": "上证50",
+    "adjust": "none",
+    "rows": 2149,
+    "start": "2018-01-02",
+    "end": "2026-11-12"
+  },
+  "399006": {
+    "vendor": "eastmoney",
+    "name": "创业板指",
+    "adjust": "none",
+    "rows": 3993,
+    "start": "2010-06-01",
+    "end": "2026-11-11"
+  },
+  "NDX": {
+    "vendor": "eastmoney",
+    "name": "纳斯达克100",
+    "adjust": "none",
+    "rows": 2228,
+    "start": "2018-01-02",
+    "end": "2026-11-11"
+  },
+  "SPX": {
+    "vendor": "eastmoney",
+    "name": "标普500",
+    "adjust": "none",
+    "rows": 2228,
+    "start": "2018-01-02",
+    "end": "2026-11-11"
+  },
+  "600519": {
+    "vendor": "sina",
+    "name": "贵州茅台",
+    "adjust": "none",
+    "rows": 2000,
+    "start": "2018-08-13",
+    "end": "2026-11-12"
+  },
+  "000858": {
+    "vendor": "sina",
+    "name": "五粮液",
+    "adjust": "none",
+    "rows": 2000,
+    "start": "2018-08-13",
+    "end": "2026-11-12"
+  },
+  "300750": {
+    "vendor": "sina",
+    "name": "宁德时代",
+    "adjust": "2023-04-26 10转8派2.52元，已前复权",
+    "rows": 2000,
+    "start": "2018-08-13",
+    "end": "2026-11-12"
+  },
+  "601318": {
+    "vendor": "sina",
+    "name": "中国平安",
+    "adjust": "none",
+    "rows": 2000,
+    "start": "2018-08-13",
+    "end": "2026-11-12"
+  },
+  "BTCUSDT": {
+    "vendor": "binance",
+    "name": "比特币",
+    "adjust": "none",
+    "rows": 3238,
+    "start": "2018-01-01",
+    "end": "2026-11-12"
+  },
+  "ETHUSDT": {
+    "vendor": "binance",
+    "name": "以太坊",
+    "adjust": "none",
+    "rows": 3238,
+    "start": "2018-01-01",
+    "end": "2026-11-12"
+  }
+}

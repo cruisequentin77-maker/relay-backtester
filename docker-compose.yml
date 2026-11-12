@@ -19,3 +19,14 @@ services:
       - "5173:5173"
     depends_on:
       - backend
+
+  # Single-origin production image. Not started by plain `docker compose up`.
+  # docker compose --profile prod up --build web
+  web:
+    profiles: ["prod"]
+    build: .
+    environment:
+      PORT: "8000"
+      RELAY_ALLOW_REMOTE: "0"
+    ports:
+      - "8000:8000"

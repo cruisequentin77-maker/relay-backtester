@@ -336,7 +336,7 @@ def run_martingale(bars: Sequence[Bar], cfg: MartingaleConfig) -> Dict[str, Any]
     return {
         "symbol": "399006",
         "name": "创业板指",
-        "source": "East Money daily, unadjusted, secid=0.399006",
+        "source": "仓库打包的创业板指公开日线（东方财富 secid=0.399006，不复权）。不是合成数据，也不是实时行情。",
         "start": dates[0],
         "end": dates[-1],
         "bars": len(bars),

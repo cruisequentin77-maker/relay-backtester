@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Grok Bot · Relay Backtester — 开源五级Agent通用规则回测与可视化重演引擎</title>
+  <title>量化推演 · Relay Backtester</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -83,6 +83,18 @@
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.35); border-radius: 9999px; }
+    #studioScrub { width: 100%; accent-color: #34d399; }
+    .studio-input {
+      width: 100%;
+      background: #020617;
+      border: 1px solid #334155;
+      border-radius: 0.75rem;
+      padding: 0.4rem 0.7rem;
+      color: #e2e8f0;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .studio-input:focus { outline: none; border-color: #34d399; }
   </style>
 </head>
 <body class="min-h-screen bg-slate-950 text-slate-900 flex flex-col">
@@ -96,26 +108,33 @@
         </div>
         <div>
           <div class="flex items-center gap-2">
-            <span class="text-white font-bold text-sm tracking-tight">Relay Backtester</span>
+            <span class="text-white font-bold text-sm tracking-tight">量化推演</span>
             <span id="apiStatusBadge" class="text-[11px] font-mono-num px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
               Engine Ready
             </span>
           </div>
-          <p class="text-[11px] text-slate-400 hidden sm:block">开源五级 Agent 通用规则回测与可视化重演框架 · 前后端分离架构</p>
+          <p class="text-[11px] text-slate-400 hidden sm:block">虚拟货币、宽基指数、个股 · 五级规则逐根推进</p>
         </div>
       </div>
 
-      <!-- Mode Switcher: Crypto vs Stock -->
       <div class="flex items-center gap-1.5 bg-slate-800 p-1 rounded-xl border border-slate-700">
-        <button id="btnModeCrypto" onclick="switchMarketMode('crypto')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-white text-slate-900 shadow-sm">
-          🪙 虚拟货币 (Crypto 链上)
-        </button>
-        <button id="btnModeStock" onclick="switchMarketMode('stock')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white">
-          📈 股票市场 (Stock 量化)
-        </button>
+        <button id="btnViewStudio" onclick="switchWorkspace('studio')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm">推演</button>
+        <button id="btnViewRelay" onclick="switchWorkspace('relay')" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white">中继台</button>
       </div>
 
-      <!-- Playback & Layout Controls -->
+      <div class="flex items-center gap-1.5">
+        <a href="/martingale.html" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700">创业板马丁</a>
+      </div>
+    </div>
+    <div id="relayHeaderTools" class="hidden max-w-7xl mx-auto mt-2 flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-1.5 bg-slate-800 p-1 rounded-xl border border-slate-700">
+        <button id="btnModeCrypto" onclick="switchMarketMode('crypto')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-white text-slate-900 shadow-sm">
+          虚拟货币
+        </button>
+        <button id="btnModeStock" onclick="switchMarketMode('stock')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white">
+          股票中继
+        </button>
+      </div>
       <div class="flex items-center gap-1.5 flex-wrap">
         <button id="btnPlayPause" onclick="togglePlayPause()" class="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition shadow">
           <span id="playPauseIcon">⏸</span>
@@ -140,8 +159,119 @@
     </div>
   </header>
 
+  <section id="studioRoot" class="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4 space-y-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="text-white font-bold tracking-tight">规则推演</h2>
+          <p class="text-xs text-slate-400 mt-1">选定资产和标的后，按收盘信号逐根推进。图、仓位和规则高亮跟着时间走。</p>
+        </div>
+        <div class="flex items-center gap-1 bg-slate-800 p-1 rounded-xl border border-slate-700">
+          <button id="studioModeCrypto" onclick="setStudioMode('crypto')" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white">虚拟货币</button>
+          <button id="studioModeIndex" onclick="setStudioMode('index')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm">宽基指数</button>
+          <button id="studioModeStock" onclick="setStudioMode('stock')" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white">个股</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+        <label class="block text-slate-400">标的
+          <select id="studioSymbol" class="studio-input mt-1"></select>
+        </label>
+        <label class="block text-slate-400">或输入代码
+          <input id="studioCustom" class="studio-input mt-1" placeholder="如 399300 / 600036 / SOLUSDT" />
+        </label>
+        <label class="block text-slate-400">风格
+          <select id="studioStyle" class="studio-input mt-1">
+            <option value="trend">趋势</option>
+            <option value="breakout">突破</option>
+            <option value="mean_reversion">均值回归</option>
+          </select>
+        </label>
+        <label class="block text-slate-400">回看根数
+          <input id="studioLookback" type="number" min="40" max="3000" value="480" class="studio-input mt-1" />
+        </label>
+      </div>
+      <p id="studioSymbolNote" class="text-[11px] text-slate-500 -mt-2"></p>
+
+      <details class="bg-slate-950/60 border border-slate-800 rounded-2xl px-3 py-2">
+        <summary class="cursor-pointer text-xs font-semibold text-slate-300">规则参数与短提示</summary>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mt-3 text-xs">
+          <label class="text-slate-400">初始资金<input id="studioCash" type="number" class="studio-input mt-1" /></label>
+          <label class="text-slate-400">快均线<input id="studioFast" type="number" class="studio-input mt-1" /></label>
+          <label class="text-slate-400">慢均线<input id="studioSlow" type="number" class="studio-input mt-1" /></label>
+          <label class="text-slate-400">突破窗口<input id="studioBreakout" type="number" class="studio-input mt-1" /></label>
+          <label class="text-slate-400">仓位 %<input id="studioSize" type="number" class="studio-input mt-1" /></label>
+          <label class="text-slate-400">硬止损 %<input id="studioStop" type="number" class="studio-input mt-1" /></label>
+          <label class="text-slate-400">止盈 1 %<input id="studioTp1" type="number" class="studio-input mt-1" /></label>
+          <label class="text-slate-400">止盈 2 %<input id="studioTp2" type="number" class="studio-input mt-1" /></label>
+          <label class="text-slate-400">移动止盈 %<input id="studioTrail" type="number" class="studio-input mt-1" /></label>
+          <label class="text-slate-400">评分下限<input id="studioScore" type="number" class="studio-input mt-1" /></label>
+          <label class="text-slate-400">波动上限 %<input id="studioAtr" type="number" step="0.1" class="studio-input mt-1" /></label>
+          <label class="text-slate-400">偏离上限 %<input id="studioExtension" type="number" step="0.1" class="studio-input mt-1" /></label>
+          <label class="text-slate-400">量能倍数<input id="studioRel" type="number" step="0.1" class="studio-input mt-1" /></label>
+          <label class="text-slate-400">单日熔断 %<input id="studioDaily" type="number" step="0.1" class="studio-input mt-1" /></label>
+        </div>
+        <label class="block text-xs text-slate-400 mt-3">短提示（会覆盖上面写明的项）
+          <textarea id="studioPrompt" rows="2" class="studio-input mt-1" placeholder="突破。快线20 慢线60。仓位30%，止损8%，止盈10%/20%，移动止盈8%。"></textarea>
+        </label>
+      </details>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="studioRunBtn" onclick="runStudio()" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold">运行推演</button>
+        <button id="studioPlayBtn" onclick="studioToggle()" class="px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs font-semibold">播放</button>
+        <button onclick="studioStep(-1)" class="px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 text-xs">上一根</button>
+        <button onclick="studioStep(1)" class="px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 text-xs">下一根</button>
+        <div class="flex items-center bg-slate-800 rounded-xl p-0.5 border border-slate-700 text-[11px]">
+          <button id="studioSpeed1" onclick="studioSetSpeed(1)" class="px-2 py-1 rounded-lg text-slate-400">逐根</button>
+          <button id="studioSpeed5" onclick="studioSetSpeed(5)" class="px-2 py-1 rounded-lg bg-slate-700 text-white font-bold">5根</button>
+          <button id="studioSpeed20" onclick="studioSetSpeed(20)" class="px-2 py-1 rounded-lg text-slate-400">20根</button>
+        </div>
+        <span id="studioClock" class="text-[11px] font-mono-num text-slate-400 ml-auto">尚未运行</span>
+      </div>
+      <input id="studioScrub" type="range" min="0" max="0" value="0" oninput="studioScrub(this.value)" />
+      <p id="studioError" class="hidden text-xs text-rose-300"></p>
+      <p id="studioBanner" class="hidden rounded-xl border border-amber-400/70 bg-amber-500/15 px-3 py-2 text-xs text-amber-50"></p>
+      <p id="studioMeta" class="text-[11px] text-slate-500"></p>
+    </div>
+
+    <div id="studioMetrics" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2"></div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-sm font-semibold text-white">价格</h3>
+          <span id="studioOhlc" class="text-[11px] font-mono-num text-slate-400"></span>
+        </div>
+        <svg id="studioPriceChart" viewBox="0 0 760 230" class="w-full h-56"></svg>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-sm font-semibold text-white">权益</h3>
+          <span class="text-[11px] text-slate-500">实线为策略，虚线为买入持有</span>
+        </div>
+        <svg id="studioEquityChart" viewBox="0 0 760 230" class="w-full h-56"></svg>
+      </div>
+    </div>
+
+    <div id="studioAgents" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2"></div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <div class="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-3xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-sm font-semibold text-white">步骤日志</h3>
+          <span class="text-[11px] text-slate-500">点击一行跳到该根K线</span>
+        </div>
+        <div id="studioLog" class="max-h-80 overflow-y-auto font-mono-num text-[11px] space-y-1"></div>
+      </div>
+      <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-4">
+        <h3 class="text-sm font-semibold text-white mb-2">当前规则</h3>
+        <div id="studioRules" class="space-y-2 max-h-80 overflow-y-auto"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- Main Workspace Container: Left Phone Simulator (Exact Video UI) + Right Architecture/Rule Inspector -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+  <main id="relayRoot" class="hidden flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
     <!-- LEFT / CENTER COLUMN: 1:1 Grok Bot Video Mobile Frame -->
     <div class="lg:col-span-5 xl:col-span-5 flex flex-col items-center">
@@ -606,7 +736,7 @@ git push -u origin main
             测试连接
           </button>
         </div>
-        <input id="inputApiUrl" type="text" value="http://localhost:8000" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-mono-num text-white focus:outline-none focus:border-indigo-500" />
+        <input id="inputApiUrl" type="text" value="" placeholder="留空表示与当前页面同源" data-edited="0" oninput="this.dataset.edited='1'" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-mono-num text-white focus:outline-none focus:border-indigo-500" />
       </div>
 
       <!-- Parameter Grid -->
@@ -1691,8 +1821,25 @@ EXITS: Take 50% at +100%, 25% at +200%, trail the rest 25%.</textarea>
       syncModalInputsFromConfig();
     }
 
+    function relayApiBase() {
+      const host = location.hostname;
+      if ((host === 'localhost' || host === '127.0.0.1') && location.port === '5173') {
+        return 'http://localhost:8000';
+      }
+      return '';
+    }
+    window.relayApiBase = relayApiBase;
+
+    function currentApiBase() {
+      const input = document.getElementById('inputApiUrl');
+      if (input && input.dataset.edited === '1') {
+        return input.value.trim().replace(/\/+$/, '');
+      }
+      return relayApiBase();
+    }
+
     async function checkBackendConnection() {
-      const baseUrl = document.getElementById('inputApiUrl').value.trim().replace(/\/+$/, '');
+      const baseUrl = currentApiBase();
       const badge = document.getElementById('apiStatusBadge');
       try {
         const res = await fetch(`${baseUrl}/api/health`, { method: 'GET' });
@@ -1708,7 +1855,7 @@ EXITS: Take 50% at +100%, 25% at +200%, trail the rest 25%.</textarea>
     }
 
     async function runBacktestWithBackendFallback(cfgPayload) {
-      const baseUrl = document.getElementById('inputApiUrl').value.trim().replace(/\/+$/, '');
+      const baseUrl = currentApiBase();
       const badge = document.getElementById('apiStatusBadge');
       try {
         const res = await fetch(`${baseUrl}/api/backtest`, {
@@ -1765,13 +1912,52 @@ EXITS: Take 50% at +100%, 25% at +200%, trail the rest 25%.</textarea>
       } catch (e) {}
     }
 
-    // Initialize App on Load
+    function switchWorkspace(view) {
+      const studio = document.getElementById('studioRoot');
+      const relay = document.getElementById('relayRoot');
+      const tools = document.getElementById('relayHeaderTools');
+      const btnStudio = document.getElementById('btnViewStudio');
+      const btnRelay = document.getElementById('btnViewRelay');
+      const active = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm';
+      const idle = 'px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white';
+      if (view === 'relay') {
+        studio.classList.add('hidden');
+        relay.classList.remove('hidden');
+        relay.classList.add('grid');
+        tools.classList.remove('hidden');
+        tools.classList.add('flex');
+        btnRelay.className = active;
+        btnStudio.className = idle;
+        if (window.studioPause) window.studioPause();
+        isPlaying = true;
+        document.getElementById('playPauseIcon').textContent = '⏸';
+        document.getElementById('playPauseText').textContent = '暂停重演';
+        if (!timerHandle) startReplayLoop();
+        renderCurrentFrame();
+      } else {
+        relay.classList.add('hidden');
+        relay.classList.remove('grid');
+        studio.classList.remove('hidden');
+        tools.classList.add('hidden');
+        tools.classList.remove('flex');
+        btnStudio.className = active;
+        btnRelay.className = idle;
+        pauseReplay();
+      }
+    }
+
+    // Relay demo stays paused until the user opens 中继台. The studio boots itself.
     window.addEventListener('DOMContentLoaded', () => {
+      const apiInput = document.getElementById('inputApiUrl');
+      if (apiInput && apiInput.dataset.edited !== '1') apiInput.value = relayApiBase();
       renderTickerTape();
       renderCurrentFrame();
       renderDesktopInspector(0);
-      startReplayLoop();
+      isPlaying = false;
+      document.getElementById('playPauseIcon').textContent = '▶';
+      document.getElementById('playPauseText').textContent = '继续重演';
     });
   </script>
+  <script src="studio.js"></script>
 </body>
 </html>

@@ -1,0 +1,9 @@
+.git
+**/__pycache__
+**/*.pyc
+**/.venv
+**/venv
+backend/data/cache
+*.md
+.env
+.env.*
