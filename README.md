@@ -2,6 +2,25 @@
 
 在原有五级中继回测上增加按标的逐根推进的规则推演。虚拟货币、宽基指数、个股共用同一条事件流：每根 K 线记录权益、现金、仓位、触发的规则和负责的 Agent。中继台的 9 日叙事重演、以及创业板指马丁格尔页面都还在。
 
+## 部署
+
+这个仓库还没有公网地址。当前环境没有 Render、Railway、Fly 或 Vercel 的登录凭据，GitHub 上也没有 Pages 或既有 Deployment。下面的文件只是把同一次进程的启动方式准备好，需要你自己的账号点一次部署。
+
+生产进程用根目录 `Dockerfile`：FastAPI 同时提供页面和 `/api`，监听 `PORT`（默认 8000）。页面请求相对路径 `/api/...`，托管时不会去连 `localhost`。`./start.sh` 仍是本地两个端口（后端 8000、前端 5173），只有前端在 5173 上时才会去连 `http://localhost:8000`。
+
+Render（公开定价页，检索于 2026-11-12）：Web Service 的 Free 方案是每月 0 美元，约 0.1 CPU / 512 MB，空闲约 15 分钟会休眠，工作区每月 750 个免费实例小时。超出包含的出站流量时，没绑定付款方式会暂停免费服务，绑定了则可能计费。官方说明免费实例不适合正式生产。付费的最小实例是每月 7 美元。
+
+Railway 可以用同一份 Dockerfile 和 `railway.toml`。这次没有核到他们的现价，所以这里不写金额。
+
+部署步骤（Render）：
+
+1. 用你自己的 Render 账号连接 `https://github.com/cruisequentin77-maker/relay-backtester`
+2. 选分支 `cursor/visual-quant-sim-13c9`（或合并后的 `main`），运行时选 Docker，健康检查路径 `/api/health`
+3. 也可以在 Blueprint 里应用仓库根目录的 `render.yaml`。它指定了 `plan: free` 和 `RELAY_ALLOW_REMOTE=0`
+4. 部署完成后打开平台给出的 `https://….onrender.com`，应直接看到推演页。`/api/health` 返回 `status: ok`
+
+镜像默认 `RELAY_ALLOW_REMOTE=0`，公网实例只读仓库里的日线，不会替访问者去拉第三方行情。目录文件缺失时会改用合成演示序列：日期是 `SYNTH-0001` 这种序号，价格从 100 附近生成，界面会标明「不是历史行情」。免费实例休眠后本地磁盘会清空，所以不要依赖运行时下载的缓存。
+
 ## 启动
 
 ```bash

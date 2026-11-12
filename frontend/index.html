@@ -230,6 +230,7 @@
       </div>
       <input id="studioScrub" type="range" min="0" max="0" value="0" oninput="studioScrub(this.value)" />
       <p id="studioError" class="hidden text-xs text-rose-300"></p>
+      <p id="studioBanner" class="hidden rounded-xl border border-amber-400/70 bg-amber-500/15 px-3 py-2 text-xs text-amber-50"></p>
       <p id="studioMeta" class="text-[11px] text-slate-500"></p>
     </div>
 
@@ -735,7 +736,7 @@ git push -u origin main
             测试连接
           </button>
         </div>
-        <input id="inputApiUrl" type="text" value="http://localhost:8000" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-mono-num text-white focus:outline-none focus:border-indigo-500" />
+        <input id="inputApiUrl" type="text" value="" placeholder="留空表示与当前页面同源" data-edited="0" oninput="this.dataset.edited='1'" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-mono-num text-white focus:outline-none focus:border-indigo-500" />
       </div>
 
       <!-- Parameter Grid -->
@@ -1820,8 +1821,25 @@ EXITS: Take 50% at +100%, 25% at +200%, trail the rest 25%.</textarea>
       syncModalInputsFromConfig();
     }
 
+    function relayApiBase() {
+      const host = location.hostname;
+      if ((host === 'localhost' || host === '127.0.0.1') && location.port === '5173') {
+        return 'http://localhost:8000';
+      }
+      return '';
+    }
+    window.relayApiBase = relayApiBase;
+
+    function currentApiBase() {
+      const input = document.getElementById('inputApiUrl');
+      if (input && input.dataset.edited === '1') {
+        return input.value.trim().replace(/\/+$/, '');
+      }
+      return relayApiBase();
+    }
+
     async function checkBackendConnection() {
-      const baseUrl = document.getElementById('inputApiUrl').value.trim().replace(/\/+$/, '');
+      const baseUrl = currentApiBase();
       const badge = document.getElementById('apiStatusBadge');
       try {
         const res = await fetch(`${baseUrl}/api/health`, { method: 'GET' });
@@ -1837,7 +1855,7 @@ EXITS: Take 50% at +100%, 25% at +200%, trail the rest 25%.</textarea>
     }
 
     async function runBacktestWithBackendFallback(cfgPayload) {
-      const baseUrl = document.getElementById('inputApiUrl').value.trim().replace(/\/+$/, '');
+      const baseUrl = currentApiBase();
       const badge = document.getElementById('apiStatusBadge');
       try {
         const res = await fetch(`${baseUrl}/api/backtest`, {
@@ -1930,6 +1948,8 @@ EXITS: Take 50% at +100%, 25% at +200%, trail the rest 25%.</textarea>
 
     // Relay demo stays paused until the user opens 中继台. The studio boots itself.
     window.addEventListener('DOMContentLoaded', () => {
+      const apiInput = document.getElementById('inputApiUrl');
+      if (apiInput && apiInput.dataset.edited !== '1') apiInput.value = relayApiBase();
       renderTickerTape();
       renderCurrentFrame();
       renderDesktopInspector(0);

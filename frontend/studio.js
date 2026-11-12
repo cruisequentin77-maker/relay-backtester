@@ -46,7 +46,11 @@ const STUDIO = {
 
 function studioApiBase() {
   const input = document.getElementById('inputApiUrl');
-  return ((input && input.value) || 'http://localhost:8000').trim().replace(/\/+$/, '');
+  if (input && input.dataset.edited === '1') {
+    return input.value.trim().replace(/\/+$/, '');
+  }
+  if (typeof window.relayApiBase === 'function') return window.relayApiBase();
+  return '';
 }
 
 function studioNum(id, fallback) {
@@ -458,9 +462,22 @@ function renderStudio() {
   document.getElementById('studioClock').textContent = `${event.date}  ·  ${STUDIO.cursor + 1}/${result.events.length}`;
   document.getElementById('studioOhlc').textContent = `O ${event.open}  H ${event.high}  L ${event.low}  C ${event.close}`;
   const data = result.data || {};
-  const sourceLabel = data.source === 'sample' ? '合成样本' : (data.source === 'remote' ? '公共行情' : '本地打包');
+  const synthetic = data.historical === false || data.provenance === 'synthetic_demonstration' || data.source === 'sample';
+  const banner = document.getElementById('studioBanner');
+  if (banner) {
+    if (synthetic) {
+      banner.classList.remove('hidden');
+      banner.textContent = data.note || '合成演示数据，不是历史行情。日期和价格都是生成的。';
+    } else {
+      banner.classList.add('hidden');
+      banner.textContent = '';
+    }
+  }
+  const sourceLabel = synthetic
+    ? '合成演示，不是历史行情'
+    : (data.provenance === 'remote_public_daily' ? '临时拉取的公开日线' : '打包的公开日线');
   document.getElementById('studioMeta').textContent = [
-    result.name, result.symbol, result.style, sourceLabel, data.note || '', data.warning || '', result.assumptions || ''
+    result.name, result.symbol, result.style, sourceLabel, synthetic ? '' : (data.note || ''), data.warning || '', result.assumptions || ''
   ].filter(Boolean).join(' · ');
   drawChart(price, [
     { values: result.events.map(item => item.high), hidden: true },

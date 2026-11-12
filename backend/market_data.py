@@ -13,7 +13,7 @@ import random
 import urllib.request
 import zlib
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -207,39 +207,22 @@ def download_spec(spec: Spec, path: Path) -> None:
     raise RuntimeError(f"没有可用的公共行情源：{spec.symbol}")
 
 
-def _business_dates(count: int, start: date = date(2022, 1, 3)) -> List[str]:
-    cursor = start
-    days: List[str] = []
-    while len(days) < count:
-        if cursor.weekday() < 5:
-            days.append(cursor.isoformat())
-        cursor += timedelta(days=1)
-    return days
-
-
 def synthesize_bars(spec: Spec, count: int = 320) -> List[Bar]:
-    """Deterministic sample path used only when bundled and remote data are both unavailable."""
+    """Deterministic demonstration path. Dates and prices are intentionally not a market history."""
     seed = zlib.crc32(spec.symbol.encode("utf-8")) & 0xFFFFFFFF
     rng = random.Random(seed)
-    if spec.mode == "crypto":
-        price = 20000.0
-    elif spec.mode == "index":
-        price = 4000.0 if spec.currency == "CNY" else 5000.0
-    else:
-        price = 80.0
-    dates = _business_dates(count)
+    price = 100.0
     bars: List[Bar] = []
     for index in range(count):
-        # Alternate a grind higher with a pullback so trend and stop rules both fire.
         drift = 0.0016 if (index % 90) < 60 else -0.0045
         shock = rng.gauss(drift, 0.011)
         opened = price
-        closed = max(0.5, opened * (1.0 + shock))
+        closed = max(1.0, opened * (1.0 + shock))
         wick = abs(rng.gauss(0, 0.004))
         high = max(opened, closed) * (1.0 + wick)
         low = min(opened, closed) * (1.0 - wick)
-        volume = abs(rng.gauss(1_500_000, 400_000)) * (1.4 if shock > 0.01 else 1.0)
-        bars.append(Bar(dates[index], opened, high, low, closed, volume))
+        volume = 1000.0 + abs(rng.gauss(0, 50))
+        bars.append(Bar(f"SYNTH-{index + 1:04d}", opened, high, low, closed, volume))
         price = closed
     return bars
 
@@ -271,15 +254,39 @@ def read_bars(path: Path) -> List[Bar]:
 
 
 def _meta(spec: Spec, source: str, rows: int, warning: str = "") -> Dict[str, object]:
+    if source == "sample":
+        provenance = "synthetic_demonstration"
+        historical = False
+        name = f"演示序列（不是{spec.name}）"
+        vendor = "synthetic"
+        note = (
+            "合成演示数据，不是历史行情。"
+            "日期是 SYNTH-0001 这种序号，价格从 100 附近生成，"
+            f"不能当作{spec.name}（{spec.symbol}）的真实走势。"
+        )
+    elif source == "remote":
+        provenance = "remote_public_daily"
+        historical = True
+        name = spec.name
+        vendor = spec.vendor
+        note = f"{spec.note}。这是临时拉取的公开日线，不是实时行情，也不是合成数据。"
+    else:
+        provenance = "bundled_public_daily"
+        historical = True
+        name = spec.name
+        vendor = spec.vendor
+        note = f"{spec.note}。这是仓库里打包的公开日线，不是实时行情，也不是合成数据。"
     return {
         "symbol": spec.symbol,
-        "name": spec.name,
+        "name": name,
         "mode": spec.mode,
         "currency": spec.currency,
-        "vendor": spec.vendor if source != "sample" else "sample",
+        "vendor": vendor,
         "source": source,
-        "adjust": spec.adjust,
-        "note": spec.note if source != "sample" else "公共行情不可用，已改用确定性合成样本",
+        "provenance": provenance,
+        "historical": historical,
+        "adjust": spec.adjust if historical else "not_applicable",
+        "note": note,
         "rows": rows,
         "warning": warning,
     }

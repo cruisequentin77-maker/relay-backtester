@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from main import BacktestRequest, execute_backtest, get_catalog, get_presets
 from market_data import Bar, load_bars, synthesize_bars, resolve_spec
@@ -137,7 +138,10 @@ def test_prompt_overrides_index_parameters():
 def test_bundled_index_symbols_and_alias():
     bars, meta = load_bars("000300", mode_hint="index")
     assert meta["source"] == "bundled"
+    assert meta["provenance"] == "bundled_public_daily"
+    assert meta["historical"] is True
     assert meta["name"] == "沪深300"
+    assert "不是合成数据" in meta["note"]
     assert bars[0].date == "2018-01-02"
     alias_bars, alias_meta = load_bars("399300", mode_hint="index")
     assert alias_meta["symbol"] == "000300"
@@ -165,10 +169,17 @@ def test_missing_bundle_falls_back_to_sample_without_raising():
             fetcher=boom,
         )
         assert meta["source"] == "sample"
+        assert meta["provenance"] == "synthetic_demonstration"
+        assert meta["historical"] is False
+        assert meta["name"].startswith("演示序列")
+        assert "不是历史行情" in meta["note"]
+        assert bars[0].date == "SYNTH-0001"
+        assert bars[0].open < 200
         assert meta["warning"]
         assert spec.symbol == "000300"
         result = run_symbol_backtest(bars, default_config("index"))
         _assert_event_contract(result)
+        assert result["events"][0]["date"].startswith("SYNTH-")
 
 
 def test_catalog_and_relay_api_stay_compatible():
@@ -199,6 +210,8 @@ def test_catalog_and_relay_api_stay_compatible():
     _assert_event_contract(streamed)
     assert streamed["symbol"] == "000016"
     assert streamed["name"] == "上证50"
+    assert streamed["data"]["provenance"] == "bundled_public_daily"
+    assert streamed["data"]["historical"] is True
 
     btc = execute_backtest(BacktestRequest(mode="crypto", symbol="BTCUSDT", lookback=120))
     _assert_event_contract(btc)
@@ -221,6 +234,16 @@ def test_catalog_and_relay_api_stay_compatible():
         assert exc.status_code == 400
 
 
+def test_request_limits_reject_oversized_input():
+    try:
+        BacktestRequest(mode="index", days=500, lookback=5000, prompt_text="x" * 4000)
+        raise AssertionError("oversized request should fail validation")
+    except ValidationError:
+        pass
+    ok = BacktestRequest(mode="index", symbol="000300", lookback=120)
+    assert ok.lookback == 120
+
+
 def test_sample_generator_is_deterministic():
     spec = resolve_spec("ETHUSDT")
     first = synthesize_bars(spec, 40)
@@ -236,5 +259,6 @@ if __name__ == "__main__":
     test_bundled_index_symbols_and_alias()
     test_missing_bundle_falls_back_to_sample_without_raising()
     test_catalog_and_relay_api_stay_compatible()
+    test_request_limits_reject_oversized_input()
     test_sample_generator_is_deterministic()
     print("ALL SIMULATION TESTS PASSED")
