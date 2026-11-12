@@ -11,12 +11,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from engine import RelayRuleConfig, run_relay_backtest
+from market_data import catalog_payload, load_bars
 from martingale import MartingaleConfig, load_chinext_bars, run_martingale
+from simulate import bar_defaults_payload, config_from_fields, run_symbol_backtest
 
 app = FastAPI(
     title="Relay Backtester API",
     description="Open-source 5-Agent Rule Pipeline Backtesting & Visual Replay Engine (Crypto & Stock)",
-    version="1.0.0",
+    version="1.1.0",
 )
 
 app.add_middleware(
@@ -45,6 +47,19 @@ class BacktestRequest(BaseModel):
     tp2_gain_pct: Optional[float] = None
     trail_pct: Optional[float] = None
     prompt_text: Optional[str] = None
+    symbol: Optional[str] = None
+    style: Optional[str] = None
+    lookback: Optional[int] = None
+    ma_fast: Optional[int] = None
+    ma_slow: Optional[int] = None
+    breakout_lookback: Optional[int] = None
+    min_breakout_pct: Optional[float] = None
+    pullback_pct: Optional[float] = None
+    max_atr_pct: Optional[float] = None
+    max_extension_pct: Optional[float] = None
+    min_rel_volume: Optional[float] = None
+    gap_pct: Optional[float] = None
+    fee_rate: Optional[float] = None
 
 
 def build_config_from_request(req: BacktestRequest) -> RelayRuleConfig:
@@ -86,25 +101,81 @@ def build_config_from_request(req: BacktestRequest) -> RelayRuleConfig:
     return cfg
 
 
+def _run_bar(req: BacktestRequest, mode: str) -> dict:
+    symbol = (req.symbol or "").strip()
+    if not symbol:
+        symbol = {"index": "000300", "stock": "600519", "crypto": "BTCUSDT"}[mode]
+    try:
+        cfg = config_from_fields(mode, symbol, req.model_dump())
+        bars, meta = load_bars(symbol, mode_hint=mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    cfg.symbol = str(meta["symbol"])
+    result = run_symbol_backtest(bars, cfg)
+    result["symbol"] = cfg.symbol
+    result["name"] = meta["name"]
+    result["currency"] = meta["currency"]
+    result["data"] = {
+        "source": meta["source"],
+        "vendor": meta["vendor"],
+        "note": meta["note"],
+        "adjust": meta["adjust"],
+        "warning": meta["warning"],
+        "requested_symbol": meta.get("requested_symbol") or symbol,
+        "rows": len(result["events"]),
+        "start": result["events"][0]["date"],
+        "end": result["events"][-1]["date"],
+    }
+    return result
+
+
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "engine": "relay-backtester-v1"}
+    return {
+        "status": "ok",
+        "engine": "relay-backtester-v1",
+        "modes": ["crypto", "index", "stock"],
+    }
+
+
+@app.get("/api/catalog")
+def get_catalog():
+    return {
+        "modes": ["crypto", "index", "stock"],
+        "catalog": catalog_payload(),
+        "bar_defaults": bar_defaults_payload(),
+    }
 
 
 @app.get("/api/presets")
 def get_presets():
     crypto_cfg = build_config_from_request(BacktestRequest(mode="crypto"))
     stock_cfg = build_config_from_request(BacktestRequest(mode="stock"))
+    crypto = run_relay_backtest(crypto_cfg)
+    stock = run_relay_backtest(stock_cfg)
+    crypto["engine"] = "relay"
+    stock["engine"] = "relay"
     return {
-        "crypto": run_relay_backtest(crypto_cfg),
-        "stock": run_relay_backtest(stock_cfg),
+        "crypto": crypto,
+        "stock": stock,
+        "modes": ["crypto", "index", "stock"],
+        "catalog": catalog_payload(),
+        "bar_defaults": bar_defaults_payload(),
     }
 
 
 @app.post("/api/backtest")
 def execute_backtest(req: BacktestRequest):
+    mode = (req.mode or "crypto").strip().lower()
+    if mode not in {"crypto", "stock", "index"}:
+        raise HTTPException(status_code=400, detail="mode 只能是 crypto、index 或 stock")
+    symbol = (req.symbol or "").strip()
+    if mode == "index" or symbol:
+        return _run_bar(req, mode)
     cfg = build_config_from_request(req)
-    return run_relay_backtest(cfg)
+    result = run_relay_backtest(cfg)
+    result["engine"] = "relay"
+    return result
 
 
 class MartingaleRequest(BaseModel):
