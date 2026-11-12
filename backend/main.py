@@ -6,11 +6,12 @@ and switching between Crypto (On-Chain Meme/Token) and Stock (Equity Technical/F
 from __future__ import annotations
 import re
 from typing import Optional
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from engine import RelayRuleConfig, run_relay_backtest
+from martingale import MartingaleConfig, load_chinext_bars, run_martingale
 
 app = FastAPI(
     title="Relay Backtester API",
@@ -104,3 +105,28 @@ def get_presets():
 def execute_backtest(req: BacktestRequest):
     cfg = build_config_from_request(req)
     return run_relay_backtest(cfg)
+
+
+class MartingaleRequest(BaseModel):
+    initial_cash: float = Field(default=1_000_000.0, ge=1_000)
+    max_layers: int = Field(default=6, ge=1, le=8)
+    drop_step: float = Field(default=0.05, gt=0, le=0.30)
+    take_profit: float = Field(default=0.05, gt=0, le=0.50)
+    fee_rate: float = Field(default=0.0003, ge=0, le=0.01)
+
+
+@app.post("/api/martingale")
+def execute_martingale(req: MartingaleRequest):
+    """Long-only martingale on 创业板指 399006 daily closes."""
+    cfg = MartingaleConfig(
+        initial_cash=req.initial_cash,
+        max_layers=req.max_layers,
+        drop_step=req.drop_step,
+        take_profit=req.take_profit,
+        fee_rate=req.fee_rate,
+    )
+    try:
+        cfg.validate()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return run_martingale(load_chinext_bars(), cfg)

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>创业板指 · 马丁格尔回测</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: Inter, sans-serif; background: #0f172a; color: #e2e8f0; }
+    .num { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+    .grid-line { stroke: #1e293b; stroke-width: 1; }
+    .tip { position: absolute; pointer-events: none; display: none; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <header class="border-b border-slate-800 bg-slate-900/95 px-4 sm:px-6 py-3">
+    <div class="max-w-6xl mx-auto flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5">
+        <a href="/" class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 font-black text-sm">RB</a>
+        <div>
+          <div class="text-white font-bold text-sm">创业板指 · 马丁格尔回测</div>
+          <div class="text-[11px] text-slate-400">399006 日线 · 下跌加倍 · 均价止盈</div>
+        </div>
+      </div>
+      <a href="/" class="text-xs text-slate-300 border border-slate-700 rounded-lg px-3 py-1.5 hover:bg-slate-800">返回重演看板</a>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+    <form id="form" class="grid grid-cols-2 sm:grid-cols-6 gap-3 bg-slate-900 border border-slate-800 rounded-2xl p-4">
+      <label class="text-[11px] text-slate-400">初始资金
+        <input id="cash" type="number" value="1000000" min="1000" step="10000" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white num" />
+      </label>
+      <label class="text-[11px] text-slate-400">下跌加仓 %
+        <input id="drop" type="number" value="5" min="0.5" max="30" step="0.5" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white num" />
+      </label>
+      <label class="text-[11px] text-slate-400">均价止盈 %
+        <input id="tp" type="number" value="5" min="0.5" max="50" step="0.5" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white num" />
+      </label>
+      <label class="text-[11px] text-slate-400">最大层数
+        <input id="layers" type="number" value="6" min="1" max="8" step="1" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white num" />
+      </label>
+      <label class="text-[11px] text-slate-400">单边费用 %
+        <input id="fee" type="number" value="0.03" min="0" max="1" step="0.01" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white num" />
+      </label>
+      <div class="flex items-end">
+        <button id="run" type="submit" class="w-full rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm py-2">运行回测</button>
+      </div>
+    </form>
+
+    <p id="status" class="text-sm text-slate-400">正在加载创业板指并回测…</p>
+    <section id="rules" class="hidden text-[13px] text-slate-300 bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-1"></section>
+    <section id="cards" class="hidden grid grid-cols-2 lg:grid-cols-4 gap-3"></section>
+
+    <section id="chartCard" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-4">
+      <div class="flex items-center justify-between gap-3 mb-2">
+        <h2 class="text-sm font-semibold text-white">净值对比（起始 = 100）</h2>
+        <div class="flex items-center gap-3 text-[11px] text-slate-400">
+          <span class="inline-flex items-center gap-1"><i class="inline-block w-3 h-0.5 bg-emerald-400"></i>马丁格尔</span>
+          <span class="inline-flex items-center gap-1"><i class="inline-block w-3 h-0.5 bg-slate-400"></i>买入持有</span>
+        </div>
+      </div>
+      <div id="chartWrap" class="relative">
+        <svg id="chart" viewBox="0 0 960 420" class="w-full h-auto"></svg>
+        <div id="tip" class="tip z-10 rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-[11px] num shadow"></div>
+      </div>
+      <p id="caption" class="mt-2 text-[11px] text-slate-500"></p>
+    </section>
+
+    <section id="yearCard" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-4 overflow-x-auto">
+      <h2 class="text-sm font-semibold text-white mb-3">分年收益</h2>
+      <table class="w-full text-xs">
+        <thead class="text-slate-500">
+          <tr class="text-left">
+            <th class="py-1 pr-3 font-medium">年份</th>
+            <th class="py-1 pr-3 font-medium text-right">马丁格尔</th>
+            <th class="py-1 pr-3 font-medium text-right">买入持有</th>
+            <th class="py-1 font-medium text-right">超额</th>
+          </tr>
+        </thead>
+        <tbody id="years" class="num"></tbody>
+      </table>
+    </section>
+
+    <section id="tradeCard" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-4 overflow-x-auto">
+      <h2 class="text-sm font-semibold text-white mb-3">最近平仓</h2>
+      <table class="w-full text-xs">
+        <thead class="text-slate-500">
+          <tr class="text-left">
+            <th class="py-1 pr-3 font-medium">开仓</th>
+            <th class="py-1 pr-3 font-medium">平仓</th>
+            <th class="py-1 pr-3 font-medium text-right">层数</th>
+            <th class="py-1 pr-3 font-medium text-right">持有</th>
+            <th class="py-1 pr-3 font-medium text-right">盈亏</th>
+            <th class="py-1 font-medium text-right">收益率</th>
+          </tr>
+        </thead>
+        <tbody id="trades" class="num"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    const API = "http://127.0.0.1:8000";
+
+    const pct = (value) => (value * 100).toFixed(2) + "%";
+    const yuan = (value) => "¥" + Math.round(value).toLocaleString("zh-CN");
+    const cls = (value) => value >= 0 ? "text-emerald-400" : "text-rose-400";
+
+    function card(label, value, sub, tone) {
+      return `<div class="bg-slate-900 border border-slate-800 rounded-2xl p-3">
+        <div class="text-[11px] text-slate-500">${label}</div>
+        <div class="mt-1 text-lg font-semibold num ${tone || "text-white"}">${value}</div>
+        <div class="text-[11px] text-slate-500 num">${sub || ""}</div>
+      </div>`;
+    }
+
+    function polyline(values, min, max, xOf, yOf) {
+      return values.map((value, index) => `${xOf(index).toFixed(1)},${yOf(value, min, max).toFixed(1)}`).join(" ");
+    }
+
+    function renderChart(result) {
+      const curve = result.curve;
+      const svg = document.getElementById("chart");
+      const base = result.params.initial_cash;
+      const equity = curve.map((point) => point.equity / base * 100);
+      const hold = curve.map((point) => point.buy_hold / base * 100);
+      const layers = curve.map((point) => point.layer);
+      const width = 960;
+      const height = 420;
+      const pad = { l: 52, r: 16, t: 16, b: 78 };
+      const innerW = width - pad.l - pad.r;
+      const innerH = 280;
+      const all = equity.concat(hold);
+      let min = Math.min(...all);
+      let max = Math.max(...all);
+      if (min === max) { min -= 1; max += 1; }
+      const xOf = (index) => pad.l + (curve.length === 1 ? innerW / 2 : innerW * index / (curve.length - 1));
+      const yOf = (value, lo, hi) => pad.t + innerH * (1 - (value - lo) / (hi - lo));
+      const ticks = 4;
+      let grid = "";
+      let yLabels = "";
+      for (let i = 0; i <= ticks; i++) {
+        const value = min + (max - min) * i / ticks;
+        const y = yOf(value, min, max);
+        grid += `<line class="grid-line" x1="${pad.l}" y1="${y}" x2="${width - pad.r}" y2="${y}"></line>`;
+        yLabels += `<text x="${pad.l - 8}" y="${y + 4}" fill="#64748b" font-size="11" text-anchor="end">${value.toFixed(0)}</text>`;
+      }
+      const xLabels = [0, Math.floor((curve.length - 1) / 2), curve.length - 1].map((index) => {
+        return `<text x="${xOf(index)}" y="${pad.t + innerH + 18}" fill="#64748b" font-size="11" text-anchor="middle">${curve[index].date}</text>`;
+      }).join("");
+      const maxLayer = Math.max(1, ...layers);
+      const layerH = 36;
+      const layerTop = pad.t + innerH + 36;
+      const layerBars = layers.map((layer, index) => {
+        if (!layer) return "";
+        const x = xOf(index);
+        const h = layerH * layer / maxLayer;
+        return `<line x1="${x}" y1="${layerTop + layerH - h}" x2="${x}" y2="${layerTop + layerH}" stroke="#34d399" stroke-width="1.2" opacity="0.85"></line>`;
+      }).join("");
+
+      svg.innerHTML = `
+        <text x="${pad.l}" y="12" fill="#94a3b8" font-size="11">净值</text>
+        ${grid}${yLabels}
+        <polyline fill="none" stroke="#94a3b8" stroke-width="1.5" points="${polyline(hold, min, max, xOf, yOf)}"></polyline>
+        <polyline fill="none" stroke="#34d399" stroke-width="1.8" points="${polyline(equity, min, max, xOf, yOf)}"></polyline>
+        <text x="${pad.l}" y="${layerTop - 4}" fill="#64748b" font-size="11">持仓层数</text>
+        ${layerBars}
+        ${xLabels}
+        <text x="${width / 2}" y="${height - 6}" fill="#64748b" font-size="11" text-anchor="middle">日期</text>
+      `;
+
+      const wrap = document.getElementById("chartWrap");
+      const tip = document.getElementById("tip");
+      wrap.onmousemove = (event) => {
+        const rect = svg.getBoundingClientRect();
+        const px = (event.clientX - rect.left) / rect.width * width;
+        const index = Math.round((px - pad.l) / innerW * (curve.length - 1));
+        if (index < 0 || index >= curve.length) { tip.style.display = "none"; return; }
+        const point = curve[index];
+        tip.style.display = "block";
+        tip.style.left = `${event.clientX - wrap.getBoundingClientRect().left + 12}px`;
+        tip.style.top = `${event.clientY - wrap.getBoundingClientRect().top + 12}px`;
+        tip.innerHTML = `${point.date}<br>指数 ${point.close.toFixed(2)}<br>马丁 ${pct(point.equity / base - 1)} · ${point.layer} 层<br>持有 ${pct(point.buy_hold / base - 1)}`;
+      };
+      wrap.onmouseleave = () => { tip.style.display = "none"; };
+    }
+
+    function render(result) {
+      const stats = result.stats;
+      document.getElementById("status").textContent = `${result.name} ${result.symbol} · ${result.start} 至 ${result.end} · ${result.bars} 个交易日`;
+      document.getElementById("rules").classList.remove("hidden");
+      document.getElementById("rules").innerHTML = result.rules.map((line) => `<p>${line}</p>`).join("");
+      document.getElementById("cards").classList.remove("hidden");
+      document.getElementById("cards").innerHTML = [
+        card("马丁期末权益", yuan(stats.strategy_final), `累计 ${pct(stats.strategy_total_return)}`, cls(stats.strategy_total_return)),
+        card("买入持有期末", yuan(stats.buy_hold_final), `累计 ${pct(stats.buy_hold_total_return)}`, cls(stats.buy_hold_total_return)),
+        card("年化", pct(stats.strategy_cagr), `买入持有 ${pct(stats.buy_hold_cagr)}`, cls(stats.strategy_cagr)),
+        card("最大回撤", pct(stats.strategy_max_drawdown), `买入持有 ${pct(stats.buy_hold_max_drawdown)}`, "text-rose-400"),
+        card("夏普（rf=0）", stats.strategy_sharpe.toFixed(2), `买入持有 ${stats.buy_hold_sharpe.toFixed(2)}`),
+        card("主动止盈", stats.closed_trades + " 笔", `胜率 ${pct(stats.win_rate)} · 均持 ${stats.avg_hold_days.toFixed(0)} 天`),
+        card("最大层数", stats.max_layer_reached, `平均仓位 ${pct(stats.avg_exposure)}`),
+        card("累计手续费", yuan(stats.fees_paid), `超额收益 ${pct(stats.excess_total_return)}`, cls(stats.excess_total_return)),
+      ].join("");
+
+      document.getElementById("chartCard").classList.remove("hidden");
+      document.getElementById("caption").textContent = `来源：${result.source}。纵轴是相对初始资金的净值，100 等于初始资金。下方竖线是当天持仓层数。`;
+      renderChart(result);
+
+      document.getElementById("yearCard").classList.remove("hidden");
+      document.getElementById("years").innerHTML = result.yearly.map((row) => `
+        <tr class="border-t border-slate-800">
+          <td class="py-1.5 pr-3 text-slate-300">${row.year}</td>
+          <td class="py-1.5 pr-3 text-right ${cls(row.strategy)}">${pct(row.strategy)}</td>
+          <td class="py-1.5 pr-3 text-right ${cls(row.buy_hold)}">${pct(row.buy_hold)}</td>
+          <td class="py-1.5 text-right ${cls(row.excess)}">${pct(row.excess)}</td>
+        </tr>
+      `).join("");
+
+      const rows = result.trades.slice(-12).reverse();
+      document.getElementById("tradeCard").classList.remove("hidden");
+      document.getElementById("trades").innerHTML = rows.map((trade) => `
+        <tr class="border-t border-slate-800">
+          <td class="py-1.5 pr-3 text-slate-300">${trade.entry_date}</td>
+          <td class="py-1.5 pr-3 text-slate-300">${trade.exit_date}${trade.forced ? " 期末" : ""}</td>
+          <td class="py-1.5 pr-3 text-right">${trade.layers}</td>
+          <td class="py-1.5 pr-3 text-right">${trade.hold_days}</td>
+          <td class="py-1.5 pr-3 text-right ${cls(trade.pnl)}">${yuan(trade.pnl)}</td>
+          <td class="py-1.5 text-right ${cls(trade.return)}">${pct(trade.return)}</td>
+        </tr>
+      `).join("");
+      if (result.open_cycle) {
+        const open = result.open_cycle;
+        document.getElementById("status").textContent += ` · 期末仍持有 ${open.layers} 层，未到止盈，已按最后收盘价扣费结算（浮动 ${pct(open.unrealized_return)}）`;
+      }
+    }
+
+    async function runBacktest(event) {
+      if (event) event.preventDefault();
+      const button = document.getElementById("run");
+      button.disabled = true;
+      document.getElementById("status").textContent = "回测运行中…";
+      const body = {
+        initial_cash: Number(document.getElementById("cash").value),
+        drop_step: Number(document.getElementById("drop").value) / 100,
+        take_profit: Number(document.getElementById("tp").value) / 100,
+        max_layers: Number(document.getElementById("layers").value),
+        fee_rate: Number(document.getElementById("fee").value) / 100,
+      };
+      try {
+        const response = await fetch(`${API}/api/martingale`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.detail || response.statusText);
+        }
+        render(await response.json());
+      } catch (error) {
+        document.getElementById("status").textContent = "回测失败：" + error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    document.getElementById("form").addEventListener("submit", runBacktest);
+    runBacktest();
+  </script>
+</body>
+</html>
